@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState } from "react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,13 +9,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
+import { getClientData, setClientData, generateId } from "@/lib/client-store"
 
 interface Buyer { id: string; name: string }
-interface Product { id: string; name: string; unit: string; sellPrice: number; stock: number }
+interface Product { id: string; name: string; unit: string; buyPrice: number; sellPrice: number; stock: number }
 interface TransactionItem {
   productId: string
   productName: string
   quantity: number
+  buyPrice: number
   sellPrice: number
   subtotal: number
 }
@@ -29,8 +31,8 @@ interface Transaction {
   type: string
   status: string
   notes: string
-  buyer: { name: string }
-  items: { productId: string; productName: string; quantity: number; sellPrice: number; subtotal: number }[]
+  items: TransactionItem[]
+  createdAt: string
 }
 
 function formatRupiah(n: number) {
@@ -38,13 +40,13 @@ function formatRupiah(n: number) {
 }
 
 export function Transactions() {
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [buyers, setBuyers] = useState<Buyer[]>([])
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
+  const [transactions, setTransactions] = useState<Transaction[]>(() => getClientData<Transaction>('transactions'))
+  const [buyers] = useState<Buyer[]>(() => getClientData<Buyer>('buyers'))
+  const [products, setProducts] = useState<Product[]>(() => getClientData<Product>('products'))
   const [dialogOpen, setDialogOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null)
+  const [selectedTx, setSelectedTx] = useState<(Transaction & { buyer: { name: string } }) | null>(null)
 
   const [formBuyerId, setFormBuyerId] = useState("")
   const [formType, setFormType] = useState("CASH")
@@ -55,26 +57,16 @@ export function Transactions() {
   const [addQty, setAddQty] = useState("1")
   const [search, setSearch] = useState("")
   const [filterType, setFilterType] = useState("ALL")
-  const { toast } = useToast()
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [txRes, bRes, pRes] = await Promise.all([
-        fetch("/api/transactions"),
-        fetch("/api/buyers"),
-        fetch("/api/products"),
-      ])
-      setTransactions(await txRes.json())
-      setBuyers(await bRes.json())
-      setProducts(await pRes.json())
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const refreshData = () => {
+    setTransactions(getClientData<Transaction>('transactions'))
+    setProducts(getClientData<Product>('products'))
+  }
 
-  useEffect(() => { fetchData() }, [fetchData])
+  const enrichedTransactions = transactions.map((tx) => ({
+    ...tx,
+    buyer: buyers.find((b) => b.id === tx.buyerId) || { name: 'Unknown' },
+  }))
 
   const handleAddToCart = () => {
     const product = products.find((p) => p.id === addProductId)
@@ -100,7 +92,7 @@ export function Transactions() {
     } else {
       setCartItems([
         ...cartItems,
-        { productId: product.id, productName: product.name, quantity: qty, sellPrice: product.sellPrice, subtotal: qty * product.sellPrice },
+        { productId: product.id, productName: product.name, quantity: qty, buyPrice: product.buyPrice, sellPrice: product.sellPrice, subtotal: qty * product.sellPrice },
       ])
     }
     setAddProductId("")
@@ -111,7 +103,7 @@ export function Transactions() {
     setCartItems(cartItems.filter((i) => i.productId !== productId))
   }
 
-  const handleSaveTransaction = async () => {
+  const handleSaveTransaction = () => {
     if (!formBuyerId) {
       toast({ title: "Error", description: "Pilih pembeli terlebih dahulu", variant: "destructive" })
       return
@@ -120,30 +112,45 @@ export function Transactions() {
       toast({ title: "Error", description: "Tambahkan barang ke keranjang", variant: "destructive" })
       return
     }
-    try {
-      const totalAmount = cartItems.reduce((s, i) => s + i.subtotal, 0)
-      const res = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          buyerId: formBuyerId,
-          type: formType,
-          paidAmount: formType === "CREDIT" ? (Number(formPaidAmount) || 0) : totalAmount,
-          notes: formNotes,
-          items: cartItems.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-        }),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || "Gagal menyimpan")
-      }
-      toast({ title: "Berhasil", description: "Transaksi berhasil disimpan" })
-      setDialogOpen(false)
-      resetForm()
-      fetchData()
-    } catch (e: unknown) {
-      toast({ title: "Error", description: e instanceof Error ? e.message : "Gagal menyimpan transaksi", variant: "destructive" })
+    const totalAmount = cartItems.reduce((s, i) => s + i.subtotal, 0)
+    const paidAmount = formType === "CASH" ? totalAmount : (Number(formPaidAmount) || 0)
+    let status = "PAID"
+    if (formType === "CREDIT") {
+      if (paidAmount <= 0) status = "UNPAID"
+      else if (paidAmount < totalAmount) status = "PARTIAL"
+      else status = "PAID"
     }
+
+    const newTx: Transaction = {
+      id: generateId(),
+      buyerId: formBuyerId,
+      date: new Date().toISOString(),
+      totalAmount,
+      paidAmount,
+      type: formType,
+      status,
+      notes: formNotes,
+      items: cartItems.map((i) => ({ ...i })),
+      createdAt: new Date().toISOString(),
+    }
+
+    // Update stock
+    const updatedProducts = [...products]
+    for (const item of cartItems) {
+      const pIdx = updatedProducts.findIndex((p) => p.id === item.productId)
+      if (pIdx !== -1) {
+        updatedProducts[pIdx] = { ...updatedProducts[pIdx], stock: Math.max(0, updatedProducts[pIdx].stock - item.quantity) }
+      }
+    }
+
+    const updatedTx = [...transactions, newTx]
+    setClientData('transactions', updatedTx)
+    setClientData('products', updatedProducts)
+    refreshData()
+
+    toast({ title: "Berhasil", description: "Transaksi berhasil disimpan" })
+    setDialogOpen(false)
+    resetForm()
   }
 
   const resetForm = () => {
@@ -158,7 +165,7 @@ export function Transactions() {
 
   const totalAmount = cartItems.reduce((s, i) => s + i.subtotal, 0)
 
-  const filteredTransactions = transactions.filter((t) => {
+  const filteredTransactions = enrichedTransactions.filter((t) => {
     const matchSearch = t.buyer.name.toLowerCase().includes(search.toLowerCase())
     const matchType = filterType === "ALL" || t.type === filterType
     return matchSearch && matchType
@@ -173,9 +180,7 @@ export function Transactions() {
             <Input placeholder="Cari transaksi..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
           <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Semua</SelectItem>
               <SelectItem value="CASH">Tunai</SelectItem>
@@ -183,24 +188,13 @@ export function Transactions() {
             </SelectContent>
           </Select>
         </div>
-        <Button
-          onClick={() => { resetForm(); setDialogOpen(true) }}
-          className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]"
-        >
+        <Button onClick={() => { resetForm(); setDialogOpen(true) }} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
           Transaksi Baru
         </Button>
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          {[...Array(3)].map((_, i) => (
-            <Card key={i} className="animate-pulse border-0 shadow-md">
-              <CardContent className="p-5"><div className="h-16 bg-muted rounded" /></CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : filteredTransactions.length === 0 ? (
+      {filteredTransactions.length === 0 ? (
         <Card className="border-0 shadow-md">
           <CardContent className="py-12 text-center text-muted-foreground">
             {search || filterType !== "ALL" ? "Tidak ditemukan transaksi" : "Belum ada transaksi"}
@@ -231,8 +225,7 @@ export function Transactions() {
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {new Date(tx.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                      {" · "}
-                      {tx.items.length} item
+                      {" · "}{tx.items.length} item
                       {tx.notes && ` · ${tx.notes}`}
                     </p>
                   </div>
@@ -252,9 +245,7 @@ export function Transactions() {
       {/* New Transaction Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-[oklch(0.35_0.12_250)]">Transaksi Baru</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-[oklch(0.35_0.12_250)]">Transaksi Baru</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -262,9 +253,7 @@ export function Transactions() {
                 <Select value={formBuyerId} onValueChange={setFormBuyerId}>
                   <SelectTrigger><SelectValue placeholder="Pilih pembeli" /></SelectTrigger>
                   <SelectContent>
-                    {buyers.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                    ))}
+                    {buyers.map((b) => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
@@ -279,20 +268,13 @@ export function Transactions() {
                 </Select>
               </div>
             </div>
-
             {formType === "CREDIT" && (
               <div className="space-y-2">
                 <Label>Uang Dibayar Sekarang</Label>
                 <Input type="number" value={formPaidAmount} onChange={(e) => setFormPaidAmount(e.target.value)} placeholder="0" />
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label>Catatan</Label>
-              <Input value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Opsional..." />
-            </div>
-
-            {/* Add product to cart */}
+            <div className="space-y-2"><Label>Catatan</Label><Input value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Opsional..." /></div>
             <div className="border rounded-lg p-4 space-y-3">
               <Label className="text-sm font-semibold">Tambah Barang</Label>
               <div className="flex gap-2">
@@ -300,9 +282,7 @@ export function Transactions() {
                   <SelectTrigger className="flex-1"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
                   <SelectContent>
                     {products.filter((p) => p.stock > 0).map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name} (Stok: {p.stock} {p.unit}) - {formatRupiah(p.sellPrice)}
-                      </SelectItem>
+                      <SelectItem key={p.id} value={p.id}>{p.name} (Stok: {p.stock} {p.unit}) - {formatRupiah(p.sellPrice)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -312,8 +292,6 @@ export function Transactions() {
                 </Button>
               </div>
             </div>
-
-            {/* Cart */}
             {cartItems.length > 0 && (
               <div className="border rounded-lg p-4 space-y-2">
                 <Label className="text-sm font-semibold">Keranjang</Label>
@@ -332,17 +310,14 @@ export function Transactions() {
                   </div>
                 ))}
                 <div className="flex justify-between items-center pt-2 border-t font-bold text-base">
-                  <span>Total</span>
-                  <span>{formatRupiah(totalAmount)}</span>
+                  <span>Total</span><span>{formatRupiah(totalAmount)}</span>
                 </div>
               </div>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleSaveTransaction} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">
-              Simpan Transaksi
-            </Button>
+            <Button onClick={handleSaveTransaction} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">Simpan Transaksi</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -350,9 +325,7 @@ export function Transactions() {
       {/* Transaction Detail */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-[oklch(0.35_0.12_250)]">Detail Transaksi</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-[oklch(0.35_0.12_250)]">Detail Transaksi</DialogTitle></DialogHeader>
           {selectedTx && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -363,26 +336,15 @@ export function Transactions() {
                   </p>
                 </div>
                 <div className="flex gap-1">
-                  <Badge variant={selectedTx.type === "CASH" ? "default" : "secondary"}>
-                    {selectedTx.type === "CASH" ? "Tunai" : "Utang"}
-                  </Badge>
-                  <Badge
-                    variant={selectedTx.status === "PAID" ? "default" : selectedTx.status === "PARTIAL" ? "secondary" : "destructive"}
-                  >
+                  <Badge variant={selectedTx.type === "CASH" ? "default" : "secondary"}>{selectedTx.type === "CASH" ? "Tunai" : "Utang"}</Badge>
+                  <Badge variant={selectedTx.status === "PAID" ? "default" : selectedTx.status === "PARTIAL" ? "secondary" : "destructive"}>
                     {selectedTx.status === "PAID" ? "Lunas" : selectedTx.status === "PARTIAL" ? "Sebagian" : "Belum Bayar"}
                   </Badge>
                 </div>
               </div>
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="text-left p-2.5">Barang</th>
-                      <th className="text-center p-2.5">Qty</th>
-                      <th className="text-right p-2.5">Harga</th>
-                      <th className="text-right p-2.5">Subtotal</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-muted"><tr><th className="text-left p-2.5">Barang</th><th className="text-center p-2.5">Qty</th><th className="text-right p-2.5">Harga</th><th className="text-right p-2.5">Subtotal</th></tr></thead>
                   <tbody>
                     {selectedTx.items.map((item, idx) => (
                       <tr key={idx} className="border-t">
@@ -402,9 +364,7 @@ export function Transactions() {
                   <div className="flex justify-between"><span className="text-red-600 font-medium">Sisa Hutang</span><span className="text-red-600 font-bold">{formatRupiah(selectedTx.totalAmount - selectedTx.paidAmount)}</span></div>
                 )}
               </div>
-              {selectedTx.notes && (
-                <div className="text-sm text-muted-foreground border-t pt-2">Catatan: {selectedTx.notes}</div>
-              )}
+              {selectedTx.notes && <div className="text-sm text-muted-foreground border-t pt-2">Catatan: {selectedTx.notes}</div>}
             </div>
           )}
         </DialogContent>

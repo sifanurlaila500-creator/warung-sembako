@@ -9,6 +9,7 @@ import { Transactions } from "@/components/warung/Transactions"
 import { Debts } from "@/components/warung/Debts"
 import { Reports } from "@/components/warung/Reports"
 import { Login } from "@/components/warung/Login"
+import { seedInitialData } from "@/lib/client-store"
 
 const tabs = [
   {
@@ -65,7 +66,10 @@ export default function Home() {
     fetch("/api/auth/verify")
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled) setIsAuthenticated(data.authenticated === true)
+        if (!cancelled) {
+          if (data.authenticated === true) seedInitialData()
+          setIsAuthenticated(data.authenticated === true)
+        }
       })
       .catch(() => {
         if (!cancelled) setIsAuthenticated(false)
@@ -75,6 +79,7 @@ export default function Home() {
   }, [])
 
   const handleLogin = () => {
+    seedInitialData()
     setIsAuthenticated(true)
   }
 

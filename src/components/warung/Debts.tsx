@@ -7,15 +7,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { getClientData, setClientData, generateId } from "@/lib/client-store"
+import { useFetch, apiPost } from "@/hooks/use-api"
 
-interface Buyer { id: string; name: string; phone: string }
+interface Buyer { id: string; name: string; phone: string; totalDebt: number }
 interface Transaction {
   id: string; buyerId: string; date: string; totalAmount: number; paidAmount: number
   type: string; status: string; notes: string
   items: { productId: string; productName: string; quantity: number; sellPrice: number; subtotal: number }[]
+  buyer?: { name: string }
 }
-interface Payment { id: string; buyerId: string; amount: number; date: string; notes: string; buyer: { name: string } }
+interface Payment { id: string; buyerId: string; amount: number; date: string; notes: string; buyer?: { name: string } }
 
 function formatRupiah(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n)
@@ -29,11 +30,13 @@ type LedgerEntry = { date: string; type: "DEBT" | "PAYMENT"; description: string
 
 export function Debts() {
   const { toast } = useToast()
-  const [buyers, setBuyers] = useState<Buyer[]>(() => getClientData<Buyer>('buyers'))
-  const [transactions, setTransactions] = useState<Transaction[]>(() => getClientData<Transaction>('transactions'))
-  const [payments, setPayments] = useState<Payment[]>(() => getClientData<Payment>('payments'))
+  const { data: buyers, loading: buyersLoading, refetch: refetchBuyers } = useFetch<Buyer[]>("/api/buyers")
+  const { data: transactions, loading: txLoading, refetch: refetchTx } = useFetch<Transaction[]>("/api/transactions")
+  const { data: payments, loading: payLoading, refetch: refetchPay } = useFetch<Payment[]>("/api/payments")
+
   const [search, setSearch] = useState("")
   const [expandedBuyer, setExpandedBuyer] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const [payDialogOpen, setPayDialogOpen] = useState(false)
   const [payBuyerId, setPayBuyerId] = useState("")
@@ -47,106 +50,76 @@ export function Debts() {
   const [debtDesc, setDebtDesc] = useState("")
   const [debtAmount, setDebtAmount] = useState("")
 
-  const refreshData = () => {
-    setBuyers(getClientData<Buyer>('buyers'))
-    setTransactions(getClientData<Transaction>('transactions'))
-    setPayments(getClientData<Payment>('payments'))
+  const loading = buyersLoading || txLoading || payLoading
+
+  const refreshAll = async () => {
+    await Promise.all([refetchBuyers(), refetchTx(), refetchPay()])
   }
 
   // Buyers with debt
-  const buyersWithDebt = buyers.map((b) => {
-    const buyerTx = transactions.filter((t) => t.buyerId === b.id && t.type === 'CREDIT')
+  const buyersWithDebt = (buyers || []).map((b) => {
+    const buyerTx = (transactions || []).filter((t) => t.buyerId === b.id && t.type === 'CREDIT')
     const totalDebt = buyerTx.reduce((sum, t) => sum + (t.totalAmount - t.paidAmount), 0)
     return { ...b, totalDebt }
   })
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!payBuyerId) { toast({ title: "Error", description: "Pilih pembeli", variant: "destructive" }); return }
     if (!payAmount || Number(payAmount) <= 0) { toast({ title: "Error", description: "Masukkan jumlah bayar", variant: "destructive" }); return }
 
-    const payAmt = Number(payAmount)
-    const txList = [...transactions]
-
-    // Auto-distribute payment across buyer's unpaid transactions (oldest first)
-    const unpaidTx = txList
-      .filter((t) => t.buyerId === payBuyerId && (t.status === 'UNPAID' || t.status === 'PARTIAL'))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-
-    let remaining = payAmt
-    for (const tx of unpaidTx) {
-      if (remaining <= 0) break
-      const owing = tx.totalAmount - tx.paidAmount
-      const payForThis = Math.min(remaining, owing)
-      const newPaid = tx.paidAmount + payForThis
-      let newStatus = 'PAID'
-      if (newPaid <= 0) newStatus = 'UNPAID'
-      else if (newPaid < tx.totalAmount) newStatus = 'PARTIAL'
-
-      const idx = txList.findIndex((t) => t.id === tx.id)
-      if (idx !== -1) {
-        txList[idx] = { ...txList[idx], paidAmount: newPaid, status: newStatus }
-      }
-      remaining -= payForThis
+    setSaving(true)
+    try {
+      await apiPost("/api/payments", {
+        buyerId: payBuyerId,
+        amount: Number(payAmount),
+        date: payDate,
+        notes: payNotes,
+      })
+      await refreshAll()
+      toast({ title: "Berhasil", description: "Pembayaran dicatat" })
+      setPayDialogOpen(false)
+      setPayBuyerId(""); setPayAmount(""); setPayDate(getTodayStr()); setPayNotes("")
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal", variant: "destructive" })
+    } finally {
+      setSaving(false)
     }
-
-    // Create payment record
-    const buyer = buyers.find((b) => b.id === payBuyerId) || { name: 'Unknown' }
-    const newPayment: Payment = {
-      id: generateId(),
-      buyerId: payBuyerId,
-      amount: payAmt,
-      date: payDate ? new Date(payDate).toISOString() : new Date().toISOString(),
-      notes: payNotes || '',
-      buyer,
-    }
-
-    const payList = [...payments, newPayment]
-    setClientData('transactions', txList)
-    setClientData('payments', payList)
-    refreshData()
-
-    toast({ title: "Berhasil", description: "Pembayaran dicatat" })
-    setPayDialogOpen(false)
-    setPayBuyerId(""); setPayAmount(""); setPayDate(getTodayStr()); setPayNotes("")
   }
 
-  const handleAddDebt = () => {
+  const handleAddDebt = async () => {
     if (!debtBuyerId) { toast({ title: "Error", description: "Pilih pembeli", variant: "destructive" }); return }
     if (!debtAmount || Number(debtAmount) <= 0) { toast({ title: "Error", description: "Masukkan jumlah hutang", variant: "destructive" }); return }
 
-    const totalAmount = Number(debtAmount)
-    const newTx: Transaction = {
-      id: generateId(),
-      buyerId: debtBuyerId,
-      date: debtDate ? new Date(debtDate).toISOString() : new Date().toISOString(),
-      totalAmount,
-      paidAmount: 0,
-      type: 'CREDIT',
-      status: 'UNPAID',
-      notes: debtDesc || 'Hutang baru',
-      items: [],
-      createdAt: new Date().toISOString(),
+    setSaving(true)
+    try {
+      await apiPost("/api/transactions", {
+        buyerId: debtBuyerId,
+        type: 'CREDIT',
+        totalOverride: Number(debtAmount),
+        notes: debtDesc || 'Hutang baru',
+        date: debtDate,
+      })
+      await refreshAll()
+      toast({ title: "Berhasil", description: "Hutang baru dicatat" })
+      setDebtDialogOpen(false)
+      setDebtBuyerId(""); setDebtDate(getTodayStr()); setDebtDesc(""); setDebtAmount("")
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal", variant: "destructive" })
+    } finally {
+      setSaving(false)
     }
-
-    const txList = [...transactions, newTx]
-    setClientData('transactions', txList)
-    refreshData()
-
-    toast({ title: "Berhasil", description: "Hutang baru dicatat" })
-    setDebtDialogOpen(false)
-    setDebtBuyerId(""); setDebtDate(getTodayStr()); setDebtDesc(""); setDebtAmount("")
   }
 
   const debtors = buyersWithDebt.filter((b) => b.totalDebt > 0)
   const filteredDebtors = debtors.filter((d) =>
-    d.name.toLowerCase().includes(search.toLowerCase()) || d.phone.includes(search)
+    d.name.toLowerCase().includes(search.toLowerCase()) || (d.phone || "").includes(search)
   )
   const totalDebt = debtors.reduce((s, b) => s + b.totalDebt, 0)
 
   const buildLedger = (buyerId: string): LedgerEntry[] => {
     const entries: LedgerEntry[] = []
-    const buyerTx = transactions.filter((t) => t.buyerId === buyerId && t.type === "CREDIT")
-    const buyerPay = payments.filter((p) => p.buyerId === buyerId)
+    const buyerTx = (transactions || []).filter((t) => t.buyerId === buyerId && t.type === "CREDIT")
+    const buyerPay = (payments || []).filter((p) => p.buyerId === buyerId)
 
     for (const tx of buyerTx) {
       const desc = tx.items.length > 0
@@ -167,6 +140,18 @@ export function Debts() {
       e.runningDebt = Math.max(running, 0)
     }
     return entries
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[1, 2].map((i) => (
+            <Card key={i} className="border-0 shadow-md"><CardContent className="p-5"><div className="animate-pulse space-y-2"><div className="h-4 bg-muted rounded w-24" /><div className="h-8 bg-muted rounded w-32" /></div></CardContent></Card>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -211,7 +196,7 @@ export function Debts() {
         <CardHeader className="pb-3"><CardTitle className="text-lg font-semibold text-[oklch(0.35_0.12_250)]">Hutang per Orang</CardTitle></CardHeader>
         <CardContent className="px-5 pb-5">
           {filteredDebtors.length === 0 ? (
-            <p className="text-center text-muted-foreground py-6">{search ? "Tidak ditemukan" : "Tidak ada hutang 🎉"}</p>
+            <p className="text-center text-muted-foreground py-6">{search ? "Tidak ditemukan" : "Tidak ada hutang"}</p>
           ) : (
             <div className="space-y-2">
               {filteredDebtors.map((buyer) => {
@@ -275,7 +260,7 @@ export function Debts() {
             <div className="space-y-2"><Label>Keterangan *</Label><Input value={debtDesc} onChange={(e) => setDebtDesc(e.target.value)} placeholder="Contoh: 2kg beras, 1 minyak..." /></div>
             <div className="space-y-2"><Label>Total Hutang (Rp) *</Label><Input type="number" value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)} placeholder="0" /></div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setDebtDialogOpen(false)}>Batal</Button><Button onClick={handleAddDebt} className="bg-red-600 hover:bg-red-700">Simpan Hutang</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setDebtDialogOpen(false)}>Batal</Button><Button onClick={handleAddDebt} disabled={saving} className="bg-red-600 hover:bg-red-700">{saving ? "Menyimpan..." : "Simpan Hutang"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -290,7 +275,7 @@ export function Debts() {
             <div className="space-y-2"><Label>Jumlah Bayar (Rp) *</Label><Input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="0" /></div>
             <div className="space-y-2"><Label>Catatan</Label><Input value={payNotes} onChange={(e) => setPayNotes(e.target.value)} placeholder="Opsional..." /></div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setPayDialogOpen(false)}>Batal</Button><Button onClick={handlePay} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">Simpan Pembayaran</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setPayDialogOpen(false)}>Batal</Button><Button onClick={handlePay} disabled={saving} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">{saving ? "Menyimpan..." : "Simpan Pembayaran"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

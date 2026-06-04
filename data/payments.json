@@ -1,11 +1,11 @@
 [
   {
-    "id": "mpzq3px9lf3yiyj0f",
-    "buyerId": "mpzq1bay1ll2sq002",
-    "transactionId": "mpzq29n15lau36x27",
-    "amount": 20000,
-    "notes": "",
-    "date": "2026-06-04T00:00:00.000Z",
-    "createdAt": "2026-06-04T16:42:08.253Z"
+    "id": "mq00qkdvn6fsshtj7",
+    "buyerId": "b01",
+    "transactionId": "mq00qgqnbycaxys4k",
+    "amount": 50000,
+    "notes": "Bayar sebagian",
+    "date": "2025-03-02T00:00:00.000Z",
+    "createdAt": "2026-06-04T21:39:50.323Z"
   }
 ]

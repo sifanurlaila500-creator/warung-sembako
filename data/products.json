@@ -1,20 +1,11 @@
 [
   {
-    "id": "mpzpn5941tzdtqtiv",
+    "id": "mq00cq9bpmllo51m2",
     "name": "Beras 5kg",
-    "unit": "sak",
+    "unit": "pcs",
     "buyPrice": 50000,
-    "sellPrice": 60000,
-    "stock": 10,
-    "createdAt": "2026-06-04T16:29:14.968Z"
-  },
-  {
-    "id": "mpzq0gu43evz2facd",
-    "name": "Minyak 2L",
-    "unit": "botol",
-    "buyPrice": 25000,
-    "sellPrice": 30000,
-    "stock": 5,
-    "createdAt": "2026-06-04T16:39:36.508Z"
+    "sellPrice": 65000,
+    "stock": 8,
+    "createdAt": "2026-06-04T21:29:04.751Z"
   }
 ]

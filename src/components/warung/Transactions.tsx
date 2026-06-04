@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { getClientData, setClientData, generateId } from "@/lib/client-store"
+import { useFetch, apiPost, apiDelete } from "@/hooks/use-api"
 
 interface Buyer { id: string; name: string }
 interface Product { id: string; name: string; unit: string; buyPrice: number; sellPrice: number; stock: number }
@@ -25,6 +25,7 @@ interface TransactionItem {
 interface Transaction {
   id: string
   buyerId: string
+  buyer: { name: string }
   date: string
   totalAmount: number
   paidAmount: number
@@ -41,35 +42,31 @@ function formatRupiah(n: number) {
 
 export function Transactions() {
   const { toast } = useToast()
-  const [transactions, setTransactions] = useState<Transaction[]>(() => getClientData<Transaction>('transactions'))
-  const [buyers] = useState<Buyer[]>(() => getClientData<Buyer>('buyers'))
-  const [products, setProducts] = useState<Product[]>(() => getClientData<Product>('products'))
+  const { data: transactions, loading: txLoading, refetch: refetchTx } = useFetch<Transaction[]>("/api/transactions")
+  const { data: buyers, loading: buyersLoading } = useFetch<Buyer[]>("/api/buyers")
+  const { data: products, loading: productsLoading, refetch: refetchProducts } = useFetch<Product[]>("/api/products")
+
   const [dialogOpen, setDialogOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [selectedTx, setSelectedTx] = useState<(Transaction & { buyer: { name: string } }) | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const [formBuyerId, setFormBuyerId] = useState("")
   const [formType, setFormType] = useState("CASH")
   const [formPaidAmount, setFormPaidAmount] = useState("")
   const [formNotes, setFormNotes] = useState("")
+  const [formDate, setFormDate] = useState(() => new Date().toISOString().split("T")[0])
   const [cartItems, setCartItems] = useState<TransactionItem[]>([])
   const [addProductId, setAddProductId] = useState("")
   const [addQty, setAddQty] = useState("1")
   const [search, setSearch] = useState("")
   const [filterType, setFilterType] = useState("ALL")
 
-  const refreshData = () => {
-    setTransactions(getClientData<Transaction>('transactions'))
-    setProducts(getClientData<Product>('products'))
-  }
-
-  const enrichedTransactions = transactions.map((tx) => ({
-    ...tx,
-    buyer: buyers.find((b) => b.id === tx.buyerId) || { name: 'Unknown' },
-  }))
+  const loading = txLoading || buyersLoading || productsLoading
 
   const handleAddToCart = () => {
-    const product = products.find((p) => p.id === addProductId)
+    const product = (products || []).find((p) => p.id === addProductId)
     if (!product) return
     const qty = Number(addQty) || 0
     if (qty <= 0) {
@@ -103,7 +100,7 @@ export function Transactions() {
     setCartItems(cartItems.filter((i) => i.productId !== productId))
   }
 
-  const handleSaveTransaction = () => {
+  const handleSaveTransaction = async () => {
     if (!formBuyerId) {
       toast({ title: "Error", description: "Pilih pembeli terlebih dahulu", variant: "destructive" })
       return
@@ -112,45 +109,49 @@ export function Transactions() {
       toast({ title: "Error", description: "Tambahkan barang ke keranjang", variant: "destructive" })
       return
     }
-    const totalAmount = cartItems.reduce((s, i) => s + i.subtotal, 0)
-    const paidAmount = formType === "CASH" ? totalAmount : (Number(formPaidAmount) || 0)
-    let status = "PAID"
-    if (formType === "CREDIT") {
-      if (paidAmount <= 0) status = "UNPAID"
-      else if (paidAmount < totalAmount) status = "PARTIAL"
-      else status = "PAID"
+
+    setSaving(true)
+    try {
+      const totalAmount = cartItems.reduce((s, i) => s + i.subtotal, 0)
+      const paidAmount = formType === "CASH" ? totalAmount : (Number(formPaidAmount) || 0)
+
+      await apiPost("/api/transactions", {
+        buyerId: formBuyerId,
+        type: formType,
+        paidAmount,
+        notes: formNotes,
+        date: formDate,
+        items: cartItems.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      })
+
+      await refetchTx()
+      await refetchProducts()
+
+      toast({ title: "Berhasil", description: "Transaksi berhasil disimpan" })
+      setDialogOpen(false)
+      resetForm()
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal menyimpan transaksi", variant: "destructive" })
+    } finally {
+      setSaving(false)
     }
+  }
 
-    const newTx: Transaction = {
-      id: generateId(),
-      buyerId: formBuyerId,
-      date: new Date().toISOString(),
-      totalAmount,
-      paidAmount,
-      type: formType,
-      status,
-      notes: formNotes,
-      items: cartItems.map((i) => ({ ...i })),
-      createdAt: new Date().toISOString(),
+  const handleDeleteTransaction = async () => {
+    if (!selectedTx) return
+    setSaving(true)
+    try {
+      await apiDelete(`/api/transactions/${selectedTx.id}`)
+      await refetchTx()
+      await refetchProducts()
+      setDeleteDialogOpen(false)
+      setDetailOpen(false)
+      toast({ title: "Berhasil", description: "Transaksi berhasil dihapus" })
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal menghapus transaksi", variant: "destructive" })
+    } finally {
+      setSaving(false)
     }
-
-    // Update stock
-    const updatedProducts = [...products]
-    for (const item of cartItems) {
-      const pIdx = updatedProducts.findIndex((p) => p.id === item.productId)
-      if (pIdx !== -1) {
-        updatedProducts[pIdx] = { ...updatedProducts[pIdx], stock: Math.max(0, updatedProducts[pIdx].stock - item.quantity) }
-      }
-    }
-
-    const updatedTx = [...transactions, newTx]
-    setClientData('transactions', updatedTx)
-    setClientData('products', updatedProducts)
-    refreshData()
-
-    toast({ title: "Berhasil", description: "Transaksi berhasil disimpan" })
-    setDialogOpen(false)
-    resetForm()
   }
 
   const resetForm = () => {
@@ -158,6 +159,7 @@ export function Transactions() {
     setFormType("CASH")
     setFormPaidAmount("")
     setFormNotes("")
+    setFormDate(new Date().toISOString().split("T")[0])
     setCartItems([])
     setAddProductId("")
     setAddQty("1")
@@ -165,11 +167,21 @@ export function Transactions() {
 
   const totalAmount = cartItems.reduce((s, i) => s + i.subtotal, 0)
 
-  const filteredTransactions = enrichedTransactions.filter((t) => {
-    const matchSearch = t.buyer.name.toLowerCase().includes(search.toLowerCase())
+  const filteredTransactions = (transactions || []).filter((t) => {
+    const matchSearch = (t.buyer?.name || '').toLowerCase().includes(search.toLowerCase())
     const matchType = filterType === "ALL" || t.type === filterType
     return matchSearch && matchType
   })
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3, 4].map((i) => (
+          <Card key={i} className="border-0 shadow-md"><CardContent className="p-5"><div className="animate-pulse space-y-2"><div className="h-5 bg-muted rounded w-32" /><div className="h-4 bg-muted rounded w-48" /></div></CardContent></Card>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -212,7 +224,7 @@ export function Transactions() {
                 <div className="flex justify-between items-center">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold">{tx.buyer.name}</h3>
+                      <h3 className="font-semibold">{tx.buyer?.name || 'Unknown'}</h3>
                       <Badge variant={tx.type === "CASH" ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
                         {tx.type === "CASH" ? "Tunai" : "Utang"}
                       </Badge>
@@ -253,7 +265,7 @@ export function Transactions() {
                 <Select value={formBuyerId} onValueChange={setFormBuyerId}>
                   <SelectTrigger><SelectValue placeholder="Pilih pembeli" /></SelectTrigger>
                   <SelectContent>
-                    {buyers.map((b) => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}
+                    {(buyers || []).map((b) => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
@@ -268,6 +280,10 @@ export function Transactions() {
                 </Select>
               </div>
             </div>
+            <div className="space-y-2">
+              <Label>Tanggal</Label>
+              <Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
+            </div>
             {formType === "CREDIT" && (
               <div className="space-y-2">
                 <Label>Uang Dibayar Sekarang</Label>
@@ -281,7 +297,7 @@ export function Transactions() {
                 <Select value={addProductId} onValueChange={setAddProductId}>
                   <SelectTrigger className="flex-1"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
                   <SelectContent>
-                    {products.filter((p) => p.stock > 0).map((p) => (
+                    {(products || []).filter((p) => p.stock > 0).map((p) => (
                       <SelectItem key={p.id} value={p.id}>{p.name} (Stok: {p.stock} {p.unit}) - {formatRupiah(p.sellPrice)}</SelectItem>
                     ))}
                   </SelectContent>
@@ -317,7 +333,7 @@ export function Transactions() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleSaveTransaction} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">Simpan Transaksi</Button>
+            <Button onClick={handleSaveTransaction} disabled={saving} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">{saving ? "Menyimpan..." : "Simpan Transaksi"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -330,7 +346,7 @@ export function Transactions() {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="font-semibold text-lg">{selectedTx.buyer.name}</p>
+                  <p className="font-semibold text-lg">{selectedTx.buyer?.name || 'Unknown'}</p>
                   <p className="text-sm text-muted-foreground">
                     {new Date(selectedTx.date).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                   </p>
@@ -342,21 +358,23 @@ export function Transactions() {
                   </Badge>
                 </div>
               </div>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted"><tr><th className="text-left p-2.5">Barang</th><th className="text-center p-2.5">Qty</th><th className="text-right p-2.5">Harga</th><th className="text-right p-2.5">Subtotal</th></tr></thead>
-                  <tbody>
-                    {selectedTx.items.map((item, idx) => (
-                      <tr key={idx} className="border-t">
-                        <td className="p-2.5">{item.productName}</td>
-                        <td className="text-center p-2.5">{item.quantity}</td>
-                        <td className="text-right p-2.5">{formatRupiah(item.sellPrice)}</td>
-                        <td className="text-right p-2.5">{formatRupiah(item.subtotal)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {selectedTx.items.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted"><tr><th className="text-left p-2.5">Barang</th><th className="text-center p-2.5">Qty</th><th className="text-right p-2.5">Harga</th><th className="text-right p-2.5">Subtotal</th></tr></thead>
+                    <tbody>
+                      {selectedTx.items.map((item, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="p-2.5">{item.productName}</td>
+                          <td className="text-center p-2.5">{item.quantity}</td>
+                          <td className="text-right p-2.5">{formatRupiah(item.sellPrice)}</td>
+                          <td className="text-right p-2.5">{formatRupiah(item.subtotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatRupiah(selectedTx.totalAmount)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Dibayar</span><span>{formatRupiah(selectedTx.paidAmount)}</span></div>
@@ -365,8 +383,42 @@ export function Transactions() {
                 )}
               </div>
               {selectedTx.notes && <div className="text-sm text-muted-foreground border-t pt-2">Catatan: {selectedTx.notes}</div>}
+
+              {/* Delete button */}
+              <div className="border-t pt-3">
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  Hapus Transaksi
+                </Button>
+              </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-red-600">Hapus Transaksi</DialogTitle></DialogHeader>
+          <div className="py-4">
+            <p className="mb-2">Yakin ingin menghapus transaksi ini?</p>
+            {selectedTx && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm space-y-1">
+                <p><span className="text-muted-foreground">Pembeli:</span> <strong>{selectedTx.buyer?.name || 'Unknown'}</strong></p>
+                <p><span className="text-muted-foreground">Total:</span> <strong>{formatRupiah(selectedTx.totalAmount)}</strong></p>
+                <p><span className="text-muted-foreground">Tanggal:</span> {new Date(selectedTx.date).toLocaleDateString("id-ID")}</p>
+                <p className="text-red-600 font-medium mt-2">Stok barang akan dikembalikan jika transaksi dihapus.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
+            <Button onClick={handleDeleteTransaction} disabled={saving} className="bg-red-600 hover:bg-red-700">{saving ? "Menghapus..." : "Ya, Hapus"}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { getClientData, setClientData, generateId } from "@/lib/client-store"
+import { useFetch, apiPost, apiPut, apiDelete } from "@/hooks/use-api"
 
 interface Buyer {
   id: string
@@ -15,86 +15,84 @@ interface Buyer {
   phone: string
   address: string
   createdAt: string
-}
-
-interface Transaction {
-  id: string
-  buyerId: string
-  date: string
-  totalAmount: number
-  paidAmount: number
-  type: string
-  status: string
-  notes: string
-  items: { productId: string; productName: string; quantity: number; sellPrice: number; subtotal: number }[]
+  totalDebt: number
 }
 
 export function Buyers() {
   const { toast } = useToast()
-  const [buyers, setBuyers] = useState<Buyer[]>(() => getClientData<Buyer>('buyers'))
-  const [transactions] = useState<Transaction[]>(() => getClientData<Transaction>('transactions'))
+  const { data: buyers, loading, refetch } = useFetch<Buyer[]>("/api/buyers")
   const [search, setSearch] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedBuyer, setSelectedBuyer] = useState<Buyer | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const [formName, setFormName] = useState("")
   const [formPhone, setFormPhone] = useState("")
   const [formAddress, setFormAddress] = useState("")
 
-  const refreshData = useCallback(() => {
-    setBuyers(getClientData<Buyer>('buyers'))
-  }, [])
-
-  const buyersWithDebt = buyers.map((b) => {
-    const buyerTx = transactions.filter((t) => t.buyerId === b.id && t.type === 'CREDIT')
-    const totalDebt = buyerTx.reduce((sum, t) => sum + (t.totalAmount - t.paidAmount), 0)
-    return { ...b, totalDebt }
-  })
-
-  const filteredBuyers = buyersWithDebt.filter((b) =>
-    b.name.toLowerCase().includes(search.toLowerCase()) || b.phone.includes(search)
+  const filteredBuyers = (buyers || []).filter((b) =>
+    b.name.toLowerCase().includes(search.toLowerCase()) || (b.phone || "").includes(search)
   )
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!formName.trim()) {
       toast({ title: "Error", description: "Nama pembeli wajib diisi", variant: "destructive" })
       return
     }
-    const newBuyer: Buyer = {
-      id: generateId(),
-      name: formName.trim(),
-      phone: formPhone.trim(),
-      address: formAddress.trim(),
-      createdAt: new Date().toISOString(),
+    setSaving(true)
+    try {
+      await apiPost("/api/buyers", { name: formName.trim(), phone: formPhone.trim(), address: formAddress.trim() })
+      await refetch()
+      setDialogOpen(false)
+      setFormName(""); setFormPhone(""); setFormAddress("")
+      toast({ title: "Berhasil", description: "Pembeli baru ditambahkan" })
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal menambah pembeli", variant: "destructive" })
+    } finally {
+      setSaving(false)
     }
-    const updated = [...buyers, newBuyer]
-    setClientData('buyers', updated)
-    refreshData()
-    setDialogOpen(false)
-    setFormName(""); setFormPhone(""); setFormAddress("")
-    toast({ title: "Berhasil", description: "Pembeli baru ditambahkan" })
   }
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
     if (!selectedBuyer || !formName.trim()) return
-    const updated = buyers.map((b) =>
-      b.id === selectedBuyer.id ? { ...b, name: formName.trim(), phone: formPhone.trim(), address: formAddress.trim() } : b
-    )
-    setClientData('buyers', updated)
-    refreshData()
-    setEditDialogOpen(false)
-    toast({ title: "Berhasil", description: "Data pembeli diperbarui" })
+    setSaving(true)
+    try {
+      await apiPut(`/api/buyers/${selectedBuyer.id}`, { name: formName.trim(), phone: formPhone.trim(), address: formAddress.trim() })
+      await refetch()
+      setEditDialogOpen(false)
+      toast({ title: "Berhasil", description: "Data pembeli diperbarui" })
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal mengupdate pembeli", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedBuyer) return
-    const updated = buyers.filter((b) => b.id !== selectedBuyer.id)
-    setClientData('buyers', updated)
-    refreshData()
-    setDeleteDialogOpen(false)
-    toast({ title: "Berhasil", description: "Pembeli dihapus" })
+    setSaving(true)
+    try {
+      await apiDelete(`/api/buyers/${selectedBuyer.id}`)
+      await refetch()
+      setDeleteDialogOpen(false)
+      toast({ title: "Berhasil", description: "Pembeli dihapus" })
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal menghapus pembeli", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <Card key={i} className="border-0 shadow-md"><CardContent className="p-4"><div className="animate-pulse space-y-3"><div className="h-5 bg-muted rounded w-24" /><div className="h-4 bg-muted rounded w-16" /></div></CardContent></Card>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -110,7 +108,7 @@ export function Buyers() {
         </Button>
       </div>
 
-      <div className="text-sm text-muted-foreground">{buyers.length} pembeli terdaftar</div>
+      <div className="text-sm text-muted-foreground">{(buyers || []).length} pembeli terdaftar</div>
 
       {filteredBuyers.length === 0 ? (
         <Card className="border-0 shadow-md">
@@ -167,7 +165,7 @@ export function Buyers() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleAdd} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">Tambah Pembeli</Button>
+            <Button onClick={handleAdd} disabled={saving} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">{saving ? "Menyimpan..." : "Tambah Pembeli"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -183,7 +181,7 @@ export function Buyers() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleEdit} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">Simpan</Button>
+            <Button onClick={handleEdit} disabled={saving} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">{saving ? "Menyimpan..." : "Simpan"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -195,7 +193,7 @@ export function Buyers() {
           <p className="py-4">Yakin ingin menghapus <strong>{selectedBuyer?.name}</strong>?</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleDelete} className="bg-red-600 hover:bg-red-700">Hapus</Button>
+            <Button onClick={handleDelete} disabled={saving} className="bg-red-600 hover:bg-red-700">{saving ? "Menghapus..." : "Hapus"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

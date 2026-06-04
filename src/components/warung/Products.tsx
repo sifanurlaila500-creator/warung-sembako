@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { getClientData, setClientData, generateId } from "@/lib/client-store"
+import { useFetch, apiPost, apiPut, apiDelete } from "@/hooks/use-api"
 
 interface Product {
   id: string
@@ -26,12 +26,13 @@ function formatRupiah(n: number) {
 
 export function Products() {
   const { toast } = useToast()
-  const [products, setProducts] = useState<Product[]>(() => getClientData<Product>('products'))
+  const { data: products, loading, refetch } = useFetch<Product[]>("/api/products")
   const [search, setSearch] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const [formName, setFormName] = useState("")
   const [formUnit, setFormUnit] = useState("pcs")
@@ -39,61 +40,79 @@ export function Products() {
   const [formSellPrice, setFormSellPrice] = useState("")
   const [formStock, setFormStock] = useState("0")
 
-  const refreshData = useCallback(() => {
-    setProducts(getClientData<Product>('products'))
-  }, [])
-
-  const filteredProducts = products.filter((p) =>
+  const filteredProducts = (products || []).filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
   )
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!formName.trim() || !formSellPrice) {
       toast({ title: "Error", description: "Nama dan harga jual wajib diisi", variant: "destructive" })
       return
     }
-    const newProduct: Product = {
-      id: generateId(),
-      name: formName.trim(),
-      unit: formUnit || 'pcs',
-      buyPrice: Number(formBuyPrice) || 0,
-      sellPrice: Number(formSellPrice) || 0,
-      stock: Number(formStock) || 0,
-      createdAt: new Date().toISOString(),
-    }
-    const updated = [...products, newProduct]
-    setClientData('products', updated)
-    refreshData()
-    setDialogOpen(false)
-    setFormName(""); setFormUnit("pcs"); setFormBuyPrice(""); setFormSellPrice(""); setFormStock("0")
-    toast({ title: "Berhasil", description: "Produk baru ditambahkan" })
-  }
-
-  const handleEdit = () => {
-    if (!selectedProduct) return
-    const updated = products.map((p) =>
-      p.id === selectedProduct.id ? {
-        ...p,
+    setSaving(true)
+    try {
+      await apiPost("/api/products", {
         name: formName.trim(),
         unit: formUnit || 'pcs',
         buyPrice: Number(formBuyPrice) || 0,
         sellPrice: Number(formSellPrice) || 0,
         stock: Number(formStock) || 0,
-      } : p
-    )
-    setClientData('products', updated)
-    refreshData()
-    setEditDialogOpen(false)
-    toast({ title: "Berhasil", description: "Produk diperbarui" })
+      })
+      await refetch()
+      setDialogOpen(false)
+      setFormName(""); setFormUnit("pcs"); setFormBuyPrice(""); setFormSellPrice(""); setFormStock("0")
+      toast({ title: "Berhasil", description: "Produk baru ditambahkan" })
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDelete = () => {
+  const handleEdit = async () => {
     if (!selectedProduct) return
-    const updated = products.filter((p) => p.id !== selectedProduct.id)
-    setClientData('products', updated)
-    refreshData()
-    setDeleteDialogOpen(false)
-    toast({ title: "Berhasil", description: "Produk dihapus" })
+    setSaving(true)
+    try {
+      await apiPut(`/api/products/${selectedProduct.id}`, {
+        name: formName.trim(),
+        unit: formUnit || 'pcs',
+        buyPrice: Number(formBuyPrice) || 0,
+        sellPrice: Number(formSellPrice) || 0,
+        stock: Number(formStock) || 0,
+      })
+      await refetch()
+      setEditDialogOpen(false)
+      toast({ title: "Berhasil", description: "Produk diperbarui" })
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedProduct) return
+    setSaving(true)
+    try {
+      await apiDelete(`/api/products/${selectedProduct.id}`)
+      await refetch()
+      setDeleteDialogOpen(false)
+      toast({ title: "Berhasil", description: "Produk dihapus" })
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <Card key={i} className="border-0 shadow-md"><CardContent className="p-4"><div className="animate-pulse space-y-3"><div className="h-5 bg-muted rounded w-24" /><div className="h-4 bg-muted rounded w-16" /></div></CardContent></Card>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -109,7 +128,7 @@ export function Products() {
         </Button>
       </div>
 
-      <div className="text-sm text-muted-foreground">{products.length} produk terdaftar</div>
+      <div className="text-sm text-muted-foreground">{(products || []).length} produk terdaftar</div>
 
       {filteredProducts.length === 0 ? (
         <Card className="border-0 shadow-md">
@@ -175,7 +194,7 @@ export function Products() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleAdd} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">Tambah Produk</Button>
+            <Button onClick={handleAdd} disabled={saving} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">{saving ? "Menyimpan..." : "Tambah Produk"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -195,7 +214,7 @@ export function Products() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleEdit} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">Simpan</Button>
+            <Button onClick={handleEdit} disabled={saving} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">{saving ? "Menyimpan..." : "Simpan"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -207,7 +226,7 @@ export function Products() {
           <p className="py-4">Yakin ingin menghapus <strong>{selectedProduct?.name}</strong>?</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleDelete} className="bg-red-600 hover:bg-red-700">Hapus</Button>
+            <Button onClick={handleDelete} disabled={saving} className="bg-red-600 hover:bg-red-700">{saving ? "Menghapus..." : "Hapus"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

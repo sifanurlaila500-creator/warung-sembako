@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "id": "mpzpn5941tzdtqtiv",
+    "name": "Beras 5kg",
+    "unit": "sak",
+    "buyPrice": 50000,
+    "sellPrice": 60000,
+    "stock": 10,
+    "createdAt": "2026-06-04T16:29:14.968Z"
+  }
+]

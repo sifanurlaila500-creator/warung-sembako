@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Sidebar, MobileNav, MobileMoreMenu, TabType } from "@/components/warung/Sidebar"
 import { Dashboard } from "@/components/warung/Dashboard"
 import { Buyers } from "@/components/warung/Buyers"
@@ -8,6 +8,7 @@ import { Products } from "@/components/warung/Products"
 import { Transactions } from "@/components/warung/Transactions"
 import { Debts } from "@/components/warung/Debts"
 import { Reports } from "@/components/warung/Reports"
+import { Login } from "@/components/warung/Login"
 
 const tabs = [
   {
@@ -53,12 +54,70 @@ const tabTitles: Record<TabType, string> = {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null) // null = checking
+  const hasChecked = useRef(false)
 
+  useEffect(() => {
+    if (hasChecked.current) return
+    hasChecked.current = true
+
+    let cancelled = false
+    fetch("/api/auth/verify")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setIsAuthenticated(data.authenticated === true)
+      })
+      .catch(() => {
+        if (!cancelled) setIsAuthenticated(false)
+      })
+
+    return () => { cancelled = true }
+  }, [])
+
+  const handleLogin = () => {
+    setIsAuthenticated(true)
+  }
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+    } catch {
+      // ignore
+    }
+    setIsAuthenticated(false)
+  }
+
+  // Loading state while checking auth
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.20_0.08_250)] via-[oklch(0.25_0.10_250)] to-[oklch(0.15_0.06_250)]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center animate-pulse">
+            <span className="text-3xl">🏪</span>
+          </div>
+          <div className="flex items-center gap-2 text-white/70">
+            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+            </svg>
+            <span className="text-sm">Memverifikasi...</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Not authenticated - show login
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />
+  }
+
+  // Authenticated - show main app
   return (
     <div className="h-screen flex overflow-hidden bg-[oklch(0.97_0.005_250)]">
       {/* Desktop Sidebar */}
       <div className="hidden md:block shrink-0">
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} tabs={tabs} />
+        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} tabs={tabs} onLogout={handleLogout} />
       </div>
 
       {/* Main Content */}
@@ -70,8 +129,19 @@ export default function Home() {
               <h2 className="text-xl font-bold text-[oklch(0.35_0.12_250)]">{tabTitles[activeTab]}</h2>
               <p className="text-sm text-muted-foreground hidden sm:block">Warung Sembako - Sistem Pencatatan Tagihan</p>
             </div>
-            <div className="md:hidden flex items-center gap-2">
-              <span className="text-lg font-bold text-[oklch(0.35_0.12_250)]">🏪</span>
+            <div className="flex items-center gap-3">
+              {/* Logout button on mobile */}
+              <button
+                onClick={handleLogout}
+                className="md:hidden flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded-md hover:bg-red-50"
+                title="Keluar"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <span>Keluar</span>
+              </button>
+              <div className="md:hidden flex items-center gap-2">
+                <span className="text-lg font-bold text-[oklch(0.35_0.12_250)]">🏪</span>
+              </div>
             </div>
           </div>
         </header>

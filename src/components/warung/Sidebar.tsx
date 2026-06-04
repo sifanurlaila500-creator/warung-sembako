@@ -1,6 +1,6 @@
 "use client"
 
-import { ReactNode, useState, useCallback } from "react"
+import { ReactNode, useState } from "react"
 import { cn } from "@/lib/utils"
 
 export type TabType = "dashboard" | "buyers" | "products" | "transactions" | "debts" | "reports"
@@ -15,9 +15,10 @@ interface SidebarProps {
   activeTab: TabType
   onTabChange: (tab: TabType) => void
   tabs: TabConfig[]
+  onLogout?: () => void
 }
 
-export function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, tabs, onLogout }: SidebarProps) {
   return (
     <aside className="w-64 h-screen bg-[oklch(0.20_0.08_250)] text-white flex flex-col shrink-0 sticky top-0">
       <div className="p-6 border-b border-white/10">
@@ -42,6 +43,16 @@ export function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) {
         ))}
       </nav>
       <div className="p-4 border-t border-white/10">
+        {/* Logout button */}
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-red-400 hover:bg-white/5 transition-all duration-200 mb-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Keluar
+          </button>
+        )}
         <p className="text-xs text-white/40 text-center">© 2025 Warung Sembako</p>
       </div>
     </aside>

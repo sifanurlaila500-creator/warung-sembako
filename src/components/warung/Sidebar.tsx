@@ -22,7 +22,7 @@ export function Sidebar({ activeTab, onTabChange, tabs, onLogout }: SidebarProps
   return (
     <aside className="w-64 h-screen bg-[oklch(0.20_0.08_250)] text-white flex flex-col shrink-0 sticky top-0">
       <div className="p-6 border-b border-white/10">
-        <h1 className="text-xl font-bold tracking-tight">🏪 Warung Sembako</h1>
+        <h1 className="text-xl font-bold tracking-tight">🏪 WARUNG SIFA</h1>
         <p className="text-xs text-white/60 mt-1">Sistem Pencatatan Tagihan</p>
       </div>
       <nav className="flex-1 p-3 space-y-1">
@@ -53,7 +53,7 @@ export function Sidebar({ activeTab, onTabChange, tabs, onLogout }: SidebarProps
             Keluar
           </button>
         )}
-        <p className="text-xs text-white/40 text-center">© 2025 Warung Sembako</p>
+        <p className="text-xs text-white/40 text-center">© 2025 WARUNG SIFA</p>
       </div>
     </aside>
   )
@@ -62,20 +62,20 @@ export function Sidebar({ activeTab, onTabChange, tabs, onLogout }: SidebarProps
 export function MobileNav({ activeTab, onTabChange, tabs }: SidebarProps) {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-[oklch(0.20_0.08_250)] border-t border-white/10 md:hidden safe-area-bottom">
-      <nav className="flex justify-around items-center py-2 px-1">
-        {tabs.slice(0, 4).map((tab) => (
+      <nav className="grid grid-cols-6 items-center py-1.5 px-1">
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
             className={cn(
-              "flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-all",
+              "flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-[10px] font-medium transition-all",
               activeTab === tab.id
-                ? "text-white"
+                ? "text-white bg-white/10"
                 : "text-white/50"
             )}
           >
             {tab.icon}
-            <span className="truncate max-w-[60px]">{tab.label}</span>
+            <span className="truncate max-w-[52px]">{tab.label}</span>
           </button>
         ))}
       </nav>

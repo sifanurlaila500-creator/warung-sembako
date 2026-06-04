@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Warung Sembako - Sistem Pencatatan Tagihan",
+  title: "WARUNG SIFA - Sistem Pencatatan Tagihan",
   description: "Aplikasi pencatatan tagihan dan manajemen hutang untuk warung sembako",
 };
 

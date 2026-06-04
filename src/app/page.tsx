@@ -9,6 +9,7 @@ import { Transactions } from "@/components/warung/Transactions"
 import { Debts } from "@/components/warung/Debts"
 import { Reports } from "@/components/warung/Reports"
 import { Login } from "@/components/warung/Login"
+import { StorageWarning } from "@/components/warung/StorageWarning"
 
 const tabs = [
   {
@@ -147,6 +148,9 @@ export default function Home() {
             </div>
           </div>
         </header>
+
+        {/* Storage Warning */}
+        <StorageWarning />
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-24 md:pb-6">

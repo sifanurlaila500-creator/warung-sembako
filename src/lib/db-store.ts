@@ -1,8 +1,5 @@
 import { readData, writeData } from './json-db'
 
-// Check if we're in a Vercel environment with KV configured
-const useKV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
-
 const INITIAL_BUYERS = [
   "Aikbal", "Adani", "M Jamang", "M Daday", "M Idad", "B Rama", "M Deden",
   "Om Gozin", "M Tupi", "B Wawan", "M Jae", "M Aris", "M Jop", "M Rudi",
@@ -19,12 +16,27 @@ function seedBuyers() {
   }))
 }
 
+// Check if we're in a Vercel environment with KV configured
+const isVercel = !!process.env.VERCEL
+const useKV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+
 /**
  * Unified data layer:
- * - Production (Vercel): Uses Vercel KV (Redis)
+ * - Production (Vercel): Uses Vercel KV (Redis) - MUST be configured!
  * - Development (Local): Uses JSON files in /data directory
  * Auto-seeds initial buyers on first access.
  */
+
+export function getStorageMode(): { mode: 'kv' | 'json' | 'readonly'; warning?: string } {
+  if (useKV) return { mode: 'kv' }
+  if (isVercel) {
+    return {
+      mode: 'readonly',
+      warning: 'Vercel KV belum dikonfigurasi! Data tidak bisa disimpan. Silakan buat KV Store di Vercel Dashboard → Storage → Create Database → KV, lalu hubungkan ke project ini.'
+    }
+  }
+  return { mode: 'json' }
+}
 
 export async function getData<T>(filename: string): Promise<T[]> {
   if (useKV) {
@@ -49,7 +61,7 @@ export async function getData<T>(filename: string): Promise<T[]> {
     }
   }
 
-  // JSON file storage
+  // JSON file storage (local dev)
   let data = readData<T>(filename)
 
   // Auto-seed if buyers is empty (first time locally)
@@ -72,11 +84,22 @@ export async function setData<T>(filename: string, data: T[]): Promise<void> {
       await kv.set(key, data)
       return
     } catch (error) {
-      console.error('KV write error, falling back to JSON:', error)
+      console.error('KV write error:', error)
+      // On Vercel without KV, throw a clear error
+      if (isVercel) {
+        throw new Error('Gagal menyimpan data. Vercel KV belum dikonfigurasi. Buka Vercel Dashboard → Storage → buat KV database, lalu hubungkan ke project.')
+      }
+      // Fall back to JSON in dev
       writeData(filename, data)
       return
     }
   }
+
+  // On Vercel without KV, this will fail - throw clear error
+  if (isVercel) {
+    throw new Error('Gagal menyimpan data. Vercel KV belum dikonfigurasi. Buka Vercel Dashboard → Storage → buat KV database, lalu hubungkan ke project.')
+  }
+
   writeData(filename, data)
 }
 

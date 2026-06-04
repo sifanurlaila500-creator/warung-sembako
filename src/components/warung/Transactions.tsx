@@ -30,7 +30,7 @@ interface Transaction {
   status: string
   notes: string
   buyer: { name: string }
-  items: { product: { name: string }; quantity: number; sellPrice: number; subtotal: number }[]
+  items: { productId: string; productName: string; quantity: number; sellPrice: number; subtotal: number }[]
 }
 
 function formatRupiah(n: number) {
@@ -386,7 +386,7 @@ export function Transactions() {
                   <tbody>
                     {selectedTx.items.map((item, idx) => (
                       <tr key={idx} className="border-t">
-                        <td className="p-2.5">{item.product.name}</td>
+                        <td className="p-2.5">{item.productName}</td>
                         <td className="text-center p-2.5">{item.quantity}</td>
                         <td className="text-right p-2.5">{formatRupiah(item.sellPrice)}</td>
                         <td className="text-right p-2.5">{formatRupiah(item.subtotal)}</td>

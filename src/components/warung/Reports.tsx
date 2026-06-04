@@ -23,7 +23,7 @@ interface ReportData {
     totalAmount: number
     paidAmount: number
     buyer: { name: string }
-    items: { product: { name: string }; quantity: number; buyPrice: number; sellPrice: number; subtotal: number }[]
+    items: { productId: string; productName: string; quantity: number; buyPrice: number; sellPrice: number; subtotal: number }[]
   }[]
 }
 

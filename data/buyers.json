@@ -1,0 +1,23 @@
+[
+  { "id": "b01", "name": "Aikbal", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b02", "name": "Adani", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b03", "name": "M Jamang", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b04", "name": "M Daday", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b05", "name": "M Idad", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b06", "name": "B Rama", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b07", "name": "M Deden", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b08", "name": "Om Gozin", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b09", "name": "M Tupi", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b10", "name": "B Wawan", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b11", "name": "M Jae", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b12", "name": "M Aris", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b13", "name": "M Jop", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b14", "name": "M Rudi", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b15", "name": "Fadil", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b16", "name": "M Gojlag", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b17", "name": "Dayat", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b18", "name": "M Gareng", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b19", "name": "Yuda", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b20", "name": "M Andi", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" },
+  { "id": "b21", "name": "M Asi", "phone": "", "address": "", "createdAt": "2025-06-04T00:00:00.000Z" }
+]

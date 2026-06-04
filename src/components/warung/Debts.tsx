@@ -15,7 +15,7 @@ interface Transaction {
   id: string; buyerId: string; date: string; totalAmount: number; paidAmount: number
   type: string; status: string; notes: string
   buyer: { name: string }
-  items: { product: { name: string }; quantity: number; sellPrice: number; subtotal: number }[]
+  items: { productId: string; productName: string; quantity: number; sellPrice: number; subtotal: number }[]
 }
 interface Payment { id: string; buyerId: string; amount: number; date: string; notes: string; buyer: { name: string } }
 
@@ -140,7 +140,7 @@ export function Debts() {
 
     for (const tx of buyerTx) {
       const desc = tx.items.length > 0
-        ? tx.items.map((i) => `${i.product.name} x${i.quantity}`).join(", ")
+        ? tx.items.map((i) => `${i.productName} x${i.quantity}`).join(", ")
         : tx.notes || "Hutang"
       entries.push({
         date: tx.date,

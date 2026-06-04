@@ -16,9 +16,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Warung Sembako - Sistem Pencatatan Tagihan",
   description: "Aplikasi pencatatan tagihan dan manajemen hutang untuk warung sembako",
-  icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
-  },
 };
 
 export default function RootLayout({

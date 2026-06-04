@@ -1,5 +1,13 @@
-import { db } from '@/lib/db'
+import { readData, writeData } from '@/lib/json-db'
 import { NextRequest, NextResponse } from 'next/server'
+
+interface Buyer {
+  id: string
+  name: string
+  phone: string
+  address: string
+  createdAt: string
+}
 
 export async function DELETE(
   _req: NextRequest,
@@ -7,7 +15,12 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    await db.buyer.delete({ where: { id } })
+    const buyers: Buyer[] = readData('buyers.json')
+    const filtered = buyers.filter((b) => b.id !== id)
+    if (filtered.length === buyers.length) {
+      return NextResponse.json({ error: 'Pembeli tidak ditemukan' }, { status: 404 })
+    }
+    writeData('buyers.json', filtered)
     return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 })
@@ -21,15 +34,19 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await req.json()
-    const buyer = await db.buyer.update({
-      where: { id },
-      data: {
-        name: body.name,
-        phone: body.phone || '',
-        address: body.address || '',
-      },
-    })
-    return NextResponse.json(buyer)
+    const buyers: Buyer[] = readData('buyers.json')
+    const idx = buyers.findIndex((b) => b.id === id)
+    if (idx === -1) {
+      return NextResponse.json({ error: 'Pembeli tidak ditemukan' }, { status: 404 })
+    }
+    buyers[idx] = {
+      ...buyers[idx],
+      name: body.name,
+      phone: body.phone || '',
+      address: body.address || '',
+    }
+    writeData('buyers.json', buyers)
+    return NextResponse.json(buyers[idx])
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }

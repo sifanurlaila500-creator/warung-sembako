@@ -1,1 +1,23 @@
-[]
+[
+  {
+    "id": "mq0257tw2jye2drzj",
+    "buyerId": "b02",
+    "date": "2025-03-10T00:00:00.000Z",
+    "totalAmount": 130000,
+    "paidAmount": 50000,
+    "type": "CREDIT",
+    "status": "PARTIAL",
+    "notes": "Hutang Adani",
+    "items": [
+      {
+        "productId": "mq00cq9bpmllo51m2",
+        "productName": "Beras 5kg",
+        "quantity": 2,
+        "buyPrice": 50000,
+        "sellPrice": 65000,
+        "subtotal": 130000
+      }
+    ],
+    "createdAt": "2026-06-04T22:19:13.508Z"
+  }
+]

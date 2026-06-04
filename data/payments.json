@@ -7,5 +7,14 @@
     "notes": "Bayar sebagian",
     "date": "2025-03-02T00:00:00.000Z",
     "createdAt": "2026-06-04T21:39:50.323Z"
+  },
+  {
+    "id": "mq0257vzjyllpgaa1",
+    "buyerId": "b02",
+    "transactionId": "mq0257tw2jye2drzj",
+    "amount": 50000,
+    "notes": "Bayar sebagian",
+    "date": "2025-03-12T00:00:00.000Z",
+    "createdAt": "2026-06-04T22:19:13.583Z"
   }
 ]

@@ -19,7 +19,7 @@ interface SidebarProps {
 
 export function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) {
   return (
-    <aside className="w-64 min-h-screen bg-[oklch(0.20_0.08_250)] text-white flex flex-col shrink-0">
+    <aside className="w-64 h-screen bg-[oklch(0.20_0.08_250)] text-white flex flex-col shrink-0 sticky top-0">
       <div className="p-6 border-b border-white/10">
         <h1 className="text-xl font-bold tracking-tight">🏪 Warung Sembako</h1>
         <p className="text-xs text-white/60 mt-1">Sistem Pencatatan Tagihan</p>

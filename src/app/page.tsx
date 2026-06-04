@@ -55,16 +55,16 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
 
   return (
-    <div className="min-h-screen flex bg-[oklch(0.97_0.005_250)]">
+    <div className="h-screen flex overflow-hidden bg-[oklch(0.97_0.005_250)]">
       {/* Desktop Sidebar */}
-      <div className="hidden md:block">
+      <div className="hidden md:block shrink-0">
         <Sidebar activeTab={activeTab} onTabChange={setActiveTab} tabs={tabs} />
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b px-4 sm:px-6 py-4">
+        <header className="shrink-0 z-40 bg-white/80 backdrop-blur-md border-b px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-[oklch(0.35_0.12_250)]">{tabTitles[activeTab]}</h2>
@@ -77,7 +77,7 @@ export default function Home() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-24 md:pb-6">
           {activeTab === "dashboard" && <Dashboard />}
           {activeTab === "buyers" && <Buyers />}
           {activeTab === "products" && <Products />}
@@ -86,10 +86,6 @@ export default function Home() {
           {activeTab === "reports" && <Reports />}
         </main>
 
-        {/* Footer */}
-        <footer className="mt-auto border-t bg-white py-3 px-4 text-center text-xs text-muted-foreground hidden md:block">
-          © 2025 Warung Sembako - Sistem Pencatatan Tagihan
-        </footer>
       </div>
 
       {/* Mobile Bottom Navigation */}

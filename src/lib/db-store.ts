@@ -16,36 +16,70 @@ function seedBuyers() {
   }))
 }
 
-// Check if we're in a Vercel environment with KV configured
-const isVercel = !!process.env.VERCEL
-const useKV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
-
 /**
- * Unified data layer:
- * - Production (Vercel): Uses Vercel KV (Redis) - MUST be configured!
- * - Development (Local): Uses JSON files in /data directory
- * Auto-seeds initial buyers on first access.
+ * Data Storage Layer
+ * 
+ * Di Vercel: pakai Vercel KV (JSON store di cloud) — data sync di semua device
+ * Di lokal: pakai file JSON biasa — data di folder /data
+ * 
+ * Vercel KV itu cuma JSON store di cloud. Format datanya tetap JSON,
+ * cara pakainya juga sama (get/set). Cuma bedanya disimpan di cloud
+ * biar bisa diakses dari mana aja.
+ * 
+ * Cara setup Vercel KV:
+ * 1. Buka Vercel Dashboard
+ * 2. Pilih project → tab Storage
+ * 3. Create Database → KV (Redis)
+ * 4. Hubungkan ke project
+ * 5. Redeploy (otomatis)
  */
 
-export function getStorageMode(): { mode: 'kv' | 'json' | 'readonly'; warning?: string } {
-  if (useKV) return { mode: 'kv' }
-  if (isVercel) {
+// Cache KV instance supaya nggak import berulang-ulang
+let kvInstance: any = null
+let kvChecked = false
+
+async function getKv() {
+  if (kvChecked) return kvInstance
+  kvChecked = true
+  
+  try {
+    const mod = await import('@vercel/kv')
+    kvInstance = mod.kv
+    // Test koneksi
+    await kvInstance.get('__test__')
+    return kvInstance
+  } catch (err) {
+    console.log('KV tidak tersedia, pakai JSON file:', err instanceof Error ? err.message : String(err))
+    kvInstance = null
+    return null
+  }
+}
+
+export function getStorageMode(): { mode: 'kv' | 'json'; warning?: string } {
+  // Cek apakah env vars KV ada
+  const hasKVEnv = !!(process.env.KV_REST_API_URL || process.env.KV_URL)
+  const isVercel = !!process.env.VERCEL
+  
+  if (hasKVEnv) return { mode: 'kv' }
+  if (isVercel && !hasKVEnv) {
     return {
-      mode: 'readonly',
-      warning: 'Vercel KV belum dikonfigurasi! Data tidak bisa disimpan. Silakan buat KV Store di Vercel Dashboard → Storage → Create Database → KV, lalu hubungkan ke project ini.'
+      mode: 'json',
+      warning: '⚠️ Vercel KV belum diatur! Data tidak bisa disimpan di Vercel. Buka Dashboard → Storage → Create KV → Hubungkan ke project.'
     }
   }
   return { mode: 'json' }
 }
 
 export async function getData<T>(filename: string): Promise<T[]> {
-  if (useKV) {
+  const key = filename.replace('.json', '')
+  
+  // Selalu coba KV dulu (di Vercel)
+  const kv = await getKv()
+  if (kv) {
     try {
-      const { kv } = await import('@vercel/kv')
-      const key = filename.replace('.json', '')
       let data = await kv.get<T[]>(key)
-
-      // Auto-seed if buyers is null (first time on KV)
+      
+      // Auto-seed buyers kalau pertama kali
       if (data === null && key === 'buyers') {
         data = seedBuyers() as T[]
         await kv.set('buyers', data)
@@ -53,18 +87,18 @@ export async function getData<T>(filename: string): Promise<T[]> {
         await kv.set('transactions', [])
         await kv.set('payments', [])
       }
-
+      
       return data || []
-    } catch (error) {
-      console.error('KV read error, falling back to JSON:', error)
-      return readData<T>(filename)
+    } catch (err) {
+      console.error('KV read error:', err)
+      // Jatuh ke JSON file
     }
   }
-
-  // JSON file storage (local dev)
+  
+  // JSON file storage (lokal)
   let data = readData<T>(filename)
-
-  // Auto-seed if buyers is empty (first time locally)
+  
+  // Auto-seed buyers kalau pertama kali
   if (data.length === 0 && filename === 'buyers.json') {
     data = seedBuyers() as T[]
     writeData('buyers.json', data)
@@ -72,35 +106,35 @@ export async function getData<T>(filename: string): Promise<T[]> {
     writeData('transactions.json', [])
     writeData('payments.json', [])
   }
-
+  
   return data
 }
 
 export async function setData<T>(filename: string, data: T[]): Promise<void> {
-  if (useKV) {
+  const key = filename.replace('.json', '')
+  
+  // Selalu coba KV dulu (di Vercel)
+  const kv = await getKv()
+  if (kv) {
     try {
-      const { kv } = await import('@vercel/kv')
-      const key = filename.replace('.json', '')
       await kv.set(key, data)
       return
-    } catch (error) {
-      console.error('KV write error:', error)
-      // On Vercel without KV, throw a clear error
-      if (isVercel) {
-        throw new Error('Gagal menyimpan data. Vercel KV belum dikonfigurasi. Buka Vercel Dashboard → Storage → buat KV database, lalu hubungkan ke project.')
-      }
-      // Fall back to JSON in dev
-      writeData(filename, data)
-      return
+    } catch (err) {
+      console.error('KV write error:', err)
+      // Jatuh ke JSON file
     }
   }
-
-  // On Vercel without KV, this will fail - throw clear error
-  if (isVercel) {
-    throw new Error('Gagal menyimpan data. Vercel KV belum dikonfigurasi. Buka Vercel Dashboard → Storage → buat KV database, lalu hubungkan ke project.')
+  
+  // JSON file storage (lokal)
+  // Di Vercel tanpa KV, ini akan gagal — tapi kita coba aja
+  try {
+    writeData(filename, data)
+  } catch (err) {
+    throw new Error(
+      'Gagal menyimpan data! Di Vercel, file JSON tidak bisa ditulis. ' +
+      'Solusi: Buka Vercel Dashboard → project ini → tab Storage → Create Database → KV (Redis) → Hubungkan ke project → Redeploy.'
+    )
   }
-
-  writeData(filename, data)
 }
 
 export function generateId(): string {

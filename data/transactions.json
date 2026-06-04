@@ -1,0 +1,14 @@
+[
+  {
+    "id": "mpzq29n15lau36x27",
+    "buyerId": "mpzq1bay1ll2sq002",
+    "date": "2026-06-04T00:00:00.000Z",
+    "totalAmount": 50000,
+    "paidAmount": 20000,
+    "type": "CREDIT",
+    "status": "PARTIAL",
+    "notes": "Test hutang",
+    "items": [],
+    "createdAt": "2026-06-04T16:41:00.493Z"
+  }
+]

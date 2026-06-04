@@ -1,4 +1,4 @@
-import { readData, writeData, generateId } from '@/lib/json-db'
+import { getData, setData, generateId } from '@/lib/db-store'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface Transaction {
@@ -30,8 +30,8 @@ interface Buyer {
 
 export async function GET() {
   try {
-    const payments: Payment[] = readData('payments.json')
-    const buyers: Buyer[] = readData('buyers.json')
+    const payments: Payment[] = await getData('payments.json')
+    const buyers: Buyer[] = await getData('buyers.json')
 
     const enriched = payments.map((p) => ({
       ...p,
@@ -54,9 +54,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Data tidak valid' }, { status: 400 })
     }
 
-    const transactions: Transaction[] = readData('transactions.json')
-    const payments: Payment[] = readData('payments.json')
-    const buyers: Buyer[] = readData('buyers.json')
+    const transactions: Transaction[] = await getData('transactions.json')
+    const payments: Payment[] = await getData('payments.json')
+    const buyers: Buyer[] = await getData('buyers.json')
 
     // Auto-distribute payment across buyer's unpaid transactions (oldest first)
     const unpaidTx = transactions
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       remaining -= payForThis
     }
 
-    writeData('transactions.json', transactions)
+    await setData('transactions.json', transactions)
 
     // Create payment record
     const newPayment: Payment = {
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     }
 
     payments.push(newPayment)
-    writeData('payments.json', payments)
+    await setData('payments.json', payments)
 
     const buyer = buyers.find((b) => b.id === buyerId) || { name: 'Unknown' }
 

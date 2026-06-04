@@ -1,4 +1,4 @@
-import { readData, writeData, generateId } from '@/lib/json-db'
+import { getData, setData, generateId } from '@/lib/db-store'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface Product {
@@ -13,7 +13,7 @@ interface Product {
 
 export async function GET() {
   try {
-    const products: Product[] = readData('products.json')
+    const products: Product[] = await getData('products.json')
     return NextResponse.json(products)
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 })
@@ -23,7 +23,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const products: Product[] = readData('products.json')
+    const products: Product[] = await getData('products.json')
 
     const newProduct: Product = {
       id: generateId(),
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     products.push(newProduct)
-    writeData('products.json', products)
+    await setData('products.json', products)
 
     return NextResponse.json(newProduct, { status: 201 })
   } catch (error) {

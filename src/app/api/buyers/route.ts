@@ -1,4 +1,4 @@
-import { readData, writeData, generateId } from '@/lib/json-db'
+import { getData, setData, generateId } from '@/lib/db-store'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface Buyer {
@@ -18,7 +18,7 @@ interface Transaction {
   type: string
   status: string
   notes: string
-  items: { product: { name: string }; quantity: number; sellPrice: number; subtotal: number }[]
+  items: { productId: string; productName: string; quantity: number; sellPrice: number; subtotal: number }[]
 }
 
 interface Payment {
@@ -31,9 +31,8 @@ interface Payment {
 
 export async function GET() {
   try {
-    const buyers: Buyer[] = readData('buyers.json')
-    const transactions: Transaction[] = readData('transactions.json')
-    const payments: Payment[] = readData('payments.json')
+    const buyers: Buyer[] = await getData('buyers.json')
+    const transactions: Transaction[] = await getData('transactions.json')
 
     const buyersWithDebt = buyers.map((b) => {
       const buyerTx = transactions.filter((t) => t.buyerId === b.id && t.type === 'CREDIT')
@@ -50,7 +49,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const buyers: Buyer[] = readData('buyers.json')
+    const buyers: Buyer[] = await getData('buyers.json')
 
     const newBuyer: Buyer = {
       id: generateId(),
@@ -61,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     buyers.push(newBuyer)
-    writeData('buyers.json', buyers)
+    await setData('buyers.json', buyers)
 
     return NextResponse.json({ ...newBuyer, totalDebt: 0 }, { status: 201 })
   } catch (error) {

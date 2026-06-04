@@ -1,4 +1,4 @@
-import { readData, writeData, generateId } from '@/lib/json-db'
+import { getData, setData, generateId } from '@/lib/db-store'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface Product {
@@ -39,10 +39,9 @@ interface Buyer {
 
 export async function GET() {
   try {
-    const transactions: Transaction[] = readData('transactions.json')
-    const buyers: Buyer[] = readData('buyers.json')
+    const transactions: Transaction[] = await getData('transactions.json')
+    const buyers: Buyer[] = await getData('buyers.json')
 
-    // Enrich transactions with buyer name
     const enriched = transactions.map((tx) => ({
       ...tx,
       buyer: buyers.find((b) => b.id === tx.buyerId) || { name: 'Unknown' },
@@ -59,9 +58,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { buyerId, type, items, notes, date, totalOverride } = body
 
-    const transactions: Transaction[] = readData('transactions.json')
-    const products: Product[] = readData('products.json')
-    const buyers: Buyer[] = readData('buyers.json')
+    const transactions: Transaction[] = await getData('transactions.json')
+    const products: Product[] = await getData('products.json')
+    const buyers: Buyer[] = await getData('buyers.json')
 
     let totalAmount = 0
     const itemData: TransactionItem[] = []
@@ -96,7 +95,7 @@ export async function POST(req: NextRequest) {
         }
       }
       if (itemData.length > 0) {
-        writeData('products.json', products)
+        await setData('products.json', products)
       }
     }
 
@@ -122,7 +121,7 @@ export async function POST(req: NextRequest) {
     }
 
     transactions.push(newTx)
-    writeData('transactions.json', transactions)
+    await setData('transactions.json', transactions)
 
     const buyer = buyers.find((b) => b.id === buyerId) || { name: 'Unknown' }
 

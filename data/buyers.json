@@ -145,5 +145,12 @@
     "phone": "",
     "address": "",
     "createdAt": "2026-06-04T16:26:28.480Z"
+  },
+  {
+    "id": "mpzq1bay1ll2sq002",
+    "name": "Test Buyer",
+    "phone": "081234567890",
+    "address": "",
+    "createdAt": "2026-06-04T16:40:15.994Z"
   }
 ]

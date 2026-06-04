@@ -1,4 +1,4 @@
-import { readData } from '@/lib/json-db'
+import { getData } from '@/lib/db-store'
 import { NextResponse } from 'next/server'
 
 interface Buyer {
@@ -29,11 +29,17 @@ interface Payment {
   notes: string
 }
 
+interface Product {
+  id: string
+  name: string
+}
+
 export async function GET() {
   try {
-    const buyers: Buyer[] = readData('buyers.json')
-    const transactions: Transaction[] = readData('transactions.json')
-    const payments: Payment[] = readData('payments.json')
+    const buyers: Buyer[] = await getData('buyers.json')
+    const transactions: Transaction[] = await getData('transactions.json')
+    const payments: Payment[] = await getData('payments.json')
+    const products: Product[] = await getData('products.json')
 
     // Total penjualan
     const totalSales = transactions.reduce((sum, t) => sum + t.totalAmount, 0)
@@ -63,7 +69,7 @@ export async function GET() {
       .sort((a, b) => b.totalDebt - a.totalDebt)
 
     const activeDebtors = debtByBuyer.length
-    const totalProducts = buyers.length ? readData<never>('products.json').length : 0
+    const totalProducts = products.length
     const totalBuyers = buyers.length
 
     // Transaksi terbaru

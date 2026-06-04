@@ -7,5 +7,14 @@
     "sellPrice": 60000,
     "stock": 10,
     "createdAt": "2026-06-04T16:29:14.968Z"
+  },
+  {
+    "id": "mpzq0gu43evz2facd",
+    "name": "Minyak 2L",
+    "unit": "botol",
+    "buyPrice": 25000,
+    "sellPrice": 30000,
+    "stock": 5,
+    "createdAt": "2026-06-04T16:39:36.508Z"
   }
 ]

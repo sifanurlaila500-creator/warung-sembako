@@ -19,33 +19,39 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { buyerId, type, items, notes } = body
+    const { buyerId, type, items, notes, date, totalOverride } = body
 
     let totalAmount = 0
     const itemData = []
 
-    for (const item of items) {
-      const product = await db.product.findUnique({ where: { id: item.productId } })
-      if (!product) {
-        return NextResponse.json({ error: `Produk ${item.productId} tidak ditemukan` }, { status: 400 })
+    // If totalOverride is provided (quick debt entry), use it directly
+    if (totalOverride && Number(totalOverride) > 0 && (!items || items.length === 0)) {
+      totalAmount = Number(totalOverride)
+    } else {
+      // Normal transaction with items
+      for (const item of (items || [])) {
+        const product = await db.product.findUnique({ where: { id: item.productId } })
+        if (!product) {
+          return NextResponse.json({ error: `Produk ${item.productId} tidak ditemukan` }, { status: 400 })
+        }
+
+        const subtotal = product.sellPrice * item.quantity
+        totalAmount += subtotal
+
+        itemData.push({
+          productId: item.productId,
+          quantity: item.quantity,
+          buyPrice: product.buyPrice,
+          sellPrice: product.sellPrice,
+          subtotal,
+        })
+
+        // Update stock
+        await db.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        })
       }
-
-      const subtotal = product.sellPrice * item.quantity
-      totalAmount += subtotal
-
-      itemData.push({
-        productId: item.productId,
-        quantity: item.quantity,
-        buyPrice: product.buyPrice,
-        sellPrice: product.sellPrice,
-        subtotal,
-      })
-
-      // Update stock
-      await db.product.update({
-        where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
-      })
     }
 
     const paidAmount = type === 'CASH' ? totalAmount : (Number(body.paidAmount) || 0)
@@ -64,6 +70,7 @@ export async function POST(req: NextRequest) {
         paidAmount,
         status,
         notes: notes || '',
+        date: date ? new Date(date) : new Date(),
         items: { create: itemData },
       },
       include: {

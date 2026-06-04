@@ -19,7 +19,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { buyerId, amount, notes } = body
+    const { buyerId, amount, notes, date } = body
     const payAmount = Number(amount)
 
     if (!buyerId || payAmount <= 0) {
@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
         transactionId: updatedTxIds.length > 0 ? updatedTxIds[0] : null,
         amount: payAmount,
         notes: notes || '',
+        date: date ? new Date(date) : new Date(),
       },
       include: {
         buyer: true,

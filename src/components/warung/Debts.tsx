@@ -6,13 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 
 interface Buyer { id: string; name: string; phone: string; totalDebt: number }
-interface Transaction { id: string; buyerId: string; buyer: { name: string }; date: string; totalAmount: number; paidAmount: number; type: string; status: string; items: { product: { name: string }; quantity: number; subtotal: number }[] }
-interface Payment { id: string; buyerId: string; transactionId: string | null; amount: number; date: string; notes: string; buyer: { name: string }; transaction: { buyer: { name: string }; totalAmount: number } | null }
+interface Payment { id: string; buyerId: string; amount: number; date: string; notes: string; buyer: { name: string } }
 
 function formatRupiah(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n)
@@ -20,26 +17,22 @@ function formatRupiah(n: number) {
 
 export function Debts() {
   const [buyers, setBuyers] = useState<Buyer[]>([])
-  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
   const [payDialogOpen, setPayDialogOpen] = useState(false)
   const [formBuyerId, setFormBuyerId] = useState("")
-  const [formTransactionId, setFormTransactionId] = useState("")
   const [formAmount, setFormAmount] = useState("")
   const [formNotes, setFormNotes] = useState("")
+  const [search, setSearch] = useState("")
   const { toast } = useToast()
 
   const fetchData = useCallback(async () => {
     try {
-      const [bRes, tRes, pRes] = await Promise.all([
+      const [bRes, pRes] = await Promise.all([
         fetch("/api/buyers"),
-        fetch("/api/transactions"),
         fetch("/api/payments"),
       ])
       setBuyers(await bRes.json())
-      const allTx: Transaction[] = await tRes.json()
-      setTransactions(allTx.filter((t) => t.type === "CREDIT" && t.status !== "PAID"))
       setPayments(await pRes.json())
     } catch (e) {
       console.error(e)
@@ -65,7 +58,6 @@ export function Debts() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           buyerId: formBuyerId,
-          transactionId: formTransactionId || null,
           amount: Number(formAmount),
           notes: formNotes,
         }),
@@ -73,7 +65,6 @@ export function Debts() {
       toast({ title: "Berhasil", description: "Pembayaran hutang dicatat" })
       setPayDialogOpen(false)
       setFormBuyerId("")
-      setFormTransactionId("")
       setFormAmount("")
       setFormNotes("")
       fetchData()
@@ -83,7 +74,20 @@ export function Debts() {
   }
 
   const debtors = buyers.filter((b) => b.totalDebt > 0)
+  const filteredDebtors = debtors.filter((d) =>
+    d.name.toLowerCase().includes(search.toLowerCase()) ||
+    d.phone.includes(search)
+  )
   const totalDebt = debtors.reduce((s, b) => s + b.totalDebt, 0)
+
+  // Group payments by buyer
+  const paymentsByBuyer = payments.reduce<Record<string, Payment[]>>((acc, p) => {
+    if (!acc[p.buyerId]) acc[p.buyerId] = []
+    acc[p.buyerId].push(p)
+    return acc
+  }, {})
+
+  const [expandedBuyer, setExpandedBuyer] = useState<string | null>(null)
 
   return (
     <div className="space-y-6">
@@ -113,10 +117,14 @@ export function Debts() {
         </Card>
       </div>
 
-      {/* Action */}
-      <div className="flex justify-end">
+      {/* Search & Add */}
+      <div className="flex flex-col sm:flex-row justify-between gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <Input placeholder="Cari nama pembeli..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
         <Button
-          onClick={() => { setFormBuyerId(""); setFormTransactionId(""); setFormAmount(""); setFormNotes(""); setPayDialogOpen(true) }}
+          onClick={() => { setFormBuyerId(""); setFormAmount(""); setFormNotes(""); setPayDialogOpen(true) }}
           className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
@@ -124,10 +132,10 @@ export function Debts() {
         </Button>
       </div>
 
-      {/* Debtors List */}
+      {/* Debtors List - Per Person */}
       <Card className="border-0 shadow-md">
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg font-semibold text-[oklch(0.35_0.12_250)]">Daftar Hutang Pembeli</CardTitle>
+          <CardTitle className="text-lg font-semibold text-[oklch(0.35_0.12_250)]">Hutang per Orang</CardTitle>
         </CardHeader>
         <CardContent className="px-5 pb-5">
           {loading ? (
@@ -136,101 +144,91 @@ export function Debts() {
                 <div key={i} className="h-16 bg-muted rounded animate-pulse" />
               ))}
             </div>
-          ) : debtors.length === 0 ? (
-            <p className="text-center text-muted-foreground py-6">Tidak ada hutang</p>
+          ) : filteredDebtors.length === 0 ? (
+            <p className="text-center text-muted-foreground py-6">
+              {search ? "Tidak ditemukan" : "Tidak ada hutang 🎉"}
+            </p>
           ) : (
-            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-              {debtors.map((buyer) => (
-                <div key={buyer.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                  <div>
-                    <p className="font-semibold">{buyer.name}</p>
-                    {buyer.phone && <p className="text-sm text-muted-foreground">{buyer.phone}</p>}
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-red-600 text-lg">{formatRupiah(buyer.totalDebt)}</p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-1 text-xs h-7"
-                      onClick={() => {
-                        setFormBuyerId(buyer.id)
-                        setFormTransactionId("")
-                        setFormAmount("")
-                        setFormNotes("")
-                        setPayDialogOpen(true)
-                      }}
-                    >
-                      Bayar
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="space-y-2">
+              {filteredDebtors.map((buyer) => {
+                const isExpanded = expandedBuyer === buyer.id
+                const buyerPayments = paymentsByBuyer[buyer.id] || []
 
-      {/* Unpaid Transactions */}
-      <Card className="border-0 shadow-md">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg font-semibold text-[oklch(0.35_0.12_250)]">Transaksi Belum Lunas</CardTitle>
-        </CardHeader>
-        <CardContent className="px-5 pb-5">
-          {transactions.length === 0 ? (
-            <p className="text-center text-muted-foreground py-6">Semua transaksi lunas</p>
-          ) : (
-            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-              {transactions.map((tx) => (
-                <div key={tx.id} className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="font-semibold">{tx.buyer.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(tx.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                        {" · "}
-                        {tx.items.map((i) => `${i.product.name} x${i.quantity}`).join(", ")}
-                      </p>
+                return (
+                  <div key={buyer.id} className="rounded-lg border bg-white overflow-hidden">
+                    {/* Main Row */}
+                    <div className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-sm shrink-0">
+                          {buyer.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate">{buyer.name}</p>
+                          {buyer.phone && <p className="text-xs text-muted-foreground">{buyer.phone}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="font-bold text-red-600">{formatRupiah(buyer.totalDebt)}</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            className="text-xs h-8 bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]"
+                            onClick={() => {
+                              setFormBuyerId(buyer.id)
+                              setFormAmount("")
+                              setFormNotes("")
+                              setPayDialogOpen(true)
+                            }}
+                          >
+                            Bayar
+                          </Button>
+                          {buyerPayments.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-8 px-2"
+                              onClick={() => setExpandedBuyer(isExpanded ? null : buyer.id)}
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                              >
+                                <path d="m6 9 6 6 6-6"/>
+                              </svg>
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <Badge variant={tx.status === "PARTIAL" ? "secondary" : "destructive"} className="text-xs">
-                      {tx.status === "PARTIAL" ? "Sebagian" : "Belum Bayar"}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <div className="space-x-3">
-                      <span className="text-muted-foreground">Total: <span className="font-medium text-foreground">{formatRupiah(tx.totalAmount)}</span></span>
-                      <span className="text-muted-foreground">Dibayar: <span className="font-medium text-emerald-600">{formatRupiah(tx.paidAmount)}</span></span>
-                    </div>
-                    <span className="font-bold text-red-600">Kurang: {formatRupiah(tx.totalAmount - tx.paidAmount)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Payment History */}
-      <Card className="border-0 shadow-md">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg font-semibold text-[oklch(0.35_0.12_250)]">Riwayat Pembayaran</CardTitle>
-        </CardHeader>
-        <CardContent className="px-5 pb-5">
-          {payments.length === 0 ? (
-            <p className="text-center text-muted-foreground py-6">Belum ada pembayaran</p>
-          ) : (
-            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-              {payments.map((p) => (
-                <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                  <div>
-                    <p className="font-medium text-sm">{p.buyer.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(p.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                      {p.notes && ` · ${p.notes}`}
-                    </p>
+                    {/* Expanded: Payment History for this buyer */}
+                    {isExpanded && buyerPayments.length > 0 && (
+                      <div className="border-t bg-muted/20 px-4 py-3 space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Riwayat Bayar:</p>
+                        {buyerPayments.map((p) => (
+                          <div key={p.id} className="flex items-center justify-between text-sm py-1">
+                            <div className="text-muted-foreground">
+                              {new Date(p.date).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                              {p.notes && <span className="ml-1">· {p.notes}</span>}
+                            </div>
+                            <span className="font-medium text-emerald-600">+{formatRupiah(p.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <span className="font-bold text-emerald-600">{formatRupiah(p.amount)}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
@@ -245,31 +243,25 @@ export function Debts() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Pembeli *</Label>
-              <Select value={formBuyerId} onValueChange={(v) => { setFormBuyerId(v); setFormTransactionId("") }}>
-                <SelectTrigger><SelectValue placeholder="Pilih pembeli" /></SelectTrigger>
-                <SelectContent>
-                  {buyers.filter((b) => b.totalDebt > 0).map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.name} (Hutang: {formatRupiah(b.totalDebt)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={formBuyerId}
+                onChange={(e) => setFormBuyerId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Pilih pembeli</option>
+                {debtors.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} — Hutang: {formatRupiah(b.totalDebt)}
+                  </option>
+                ))}
+              </select>
             </div>
             {formBuyerId && (
-              <div className="space-y-2">
-                <Label>Transaksi (Opsional)</Label>
-                <Select value={formTransactionId} onValueChange={setFormTransactionId}>
-                  <SelectTrigger><SelectValue placeholder="Pilih transaksi atau kosongkan" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="GENERAL">Umum (tanpa transaksi tertentu)</SelectItem>
-                    {transactions.filter((t) => t.buyerId === formBuyerId).map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {new Date(t.date).toLocaleDateString("id-ID")} - {formatRupiah(t.totalAmount)} (Kurang: {formatRupiah(t.totalAmount - t.paidAmount)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="p-3 rounded-lg bg-muted/50 text-sm">
+                <span className="text-muted-foreground">Sisa hutang:</span>{" "}
+                <span className="font-bold text-red-600">
+                  {formatRupiah(debtors.find((b) => b.id === formBuyerId)?.totalDebt || 0)}
+                </span>
               </div>
             )}
             <div className="space-y-2">

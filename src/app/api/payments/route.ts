@@ -19,13 +19,48 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { buyerId, transactionId, amount, notes } = body
+    const { buyerId, amount, notes } = body
+    const payAmount = Number(amount)
 
+    if (!buyerId || payAmount <= 0) {
+      return NextResponse.json({ error: 'Data tidak valid' }, { status: 400 })
+    }
+
+    // Auto-distribute payment across buyer's unpaid transactions (oldest first)
+    const unpaidTransactions = await db.transaction.findMany({
+      where: {
+        buyerId,
+        status: { in: ['UNPAID', 'PARTIAL'] },
+      },
+      orderBy: { date: 'asc' },
+    })
+
+    let remaining = payAmount
+    const updatedTxIds: string[] = []
+
+    for (const tx of unpaidTransactions) {
+      if (remaining <= 0) break
+      const owing = tx.totalAmount - tx.paidAmount
+      const payForThis = Math.min(remaining, owing)
+      const newPaid = tx.paidAmount + payForThis
+      let newStatus = 'PAID'
+      if (newPaid <= 0) newStatus = 'UNPAID'
+      else if (newPaid < tx.totalAmount) newStatus = 'PARTIAL'
+
+      await db.transaction.update({
+        where: { id: tx.id },
+        data: { paidAmount: newPaid, status: newStatus },
+      })
+      updatedTxIds.push(tx.id)
+      remaining -= payForThis
+    }
+
+    // Create payment record linked to the first updated transaction (or none if no transactions)
     const payment = await db.payment.create({
       data: {
         buyerId,
-        transactionId: transactionId || null,
-        amount: Number(amount),
+        transactionId: updatedTxIds.length > 0 ? updatedTxIds[0] : null,
+        amount: payAmount,
         notes: notes || '',
       },
       include: {
@@ -33,25 +68,6 @@ export async function POST(req: NextRequest) {
         transaction: true,
       },
     })
-
-    // Update transaction paid amount and status
-    if (transactionId) {
-      const transaction = await db.transaction.findUnique({
-        where: { id: transactionId },
-      })
-      if (transaction) {
-        const newPaidAmount = transaction.paidAmount + Number(amount)
-        let newStatus = 'PAID'
-        if (newPaidAmount <= 0) newStatus = 'UNPAID'
-        else if (newPaidAmount < transaction.totalAmount) newStatus = 'PARTIAL'
-        else newStatus = 'PAID'
-
-        await db.transaction.update({
-          where: { id: transactionId },
-          data: { paidAmount: newPaidAmount, status: newStatus },
-        })
-      }
-    }
 
     return NextResponse.json(payment, { status: 201 })
   } catch (error) {

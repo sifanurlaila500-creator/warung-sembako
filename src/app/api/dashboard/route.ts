@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getDashboardData } from '@/lib/db-store'
+import { getDashboardData } from '@/lib/db-prisma'
 
 export async function GET() {
   try {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateBuyer, deleteBuyer } from '@/lib/db-store'
+import { updateBuyer, deleteBuyer } from '@/lib/db-prisma'
 
 export async function PUT(
   req: NextRequest,

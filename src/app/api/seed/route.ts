@@ -1,4 +1,4 @@
-import { seedDatabase } from '@/lib/db-store'
+import { seedDatabase } from '@/lib/db-prisma'
 import { NextResponse } from 'next/server'
 
 // POST /api/seed - Seed initial buyer data

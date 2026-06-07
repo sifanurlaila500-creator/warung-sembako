@@ -152,20 +152,33 @@ export async function updateProduct(id: string, input: { name: string; unit: str
 
 export async function deleteProduct(id: string) {
   checkSupabase()
-  // 1. Set product_id ke NULL di semua transaction_items yang refer ke produk ini
-  //    (nama produk tetap tersimpan di product_name)
-  const { error: nullifyError } = await supabase!
-    .from('transaction_items')
-    .update({ product_id: null })
-    .eq('product_id', id)
-  if (nullifyError) {
-    console.warn('Warning: gagal nullify product_id di transaction_items:', nullifyError.message)
-    // Tetap lanjut, coba hapus langsung
+
+  // Step 1: Try to nullify product_id in transaction_items first
+  // (this is a safety measure in case ON DELETE SET NULL isn't working)
+  try {
+    await supabase!
+      .from('transaction_items')
+      .update({ product_id: null })
+      .eq('product_id', id)
+  } catch (e) {
+    console.warn('Warning: gagal nullify product_id di transaction_items:', e)
   }
 
-  // 2. Delete produk
+  // Step 2: Try to delete the product directly
   const { error } = await supabase!.from('products').delete().eq('id', id)
-  if (error) throw new Error('Gagal menghapus produk: ' + error.message)
+  if (!error) return { success: true }
+
+  // Step 3: If direct delete failed, try deleting referencing transaction_items first
+  console.warn('Direct delete failed, trying to remove transaction_items references:', error.message)
+  try {
+    await supabase!.from('transaction_items').delete().eq('product_id', id)
+  } catch (e) {
+    console.warn('Warning: gagal hapus transaction_items:', e)
+  }
+
+  // Step 4: Try delete again
+  const { error: error2 } = await supabase!.from('products').delete().eq('id', id)
+  if (error2) throw new Error('Gagal menghapus produk: ' + error2.message)
   return { success: true }
 }
 
@@ -361,6 +374,41 @@ export async function createPayment(input: { buyerId: string; amount: number; da
     createdAt: payment.created_at,
     buyer: buyers.find((b: any) => b.id === payment.buyer_id) || { name: 'Unknown' },
   }
+}
+
+export async function deletePayment(id: string) {
+  checkSupabase()
+  // 1. Get payment info
+  const { data: payment, error: payError } = await supabase!.from('payments').select('*').eq('id', id).single()
+  if (payError || !payment) throw new Error('Pembayaran tidak ditemukan')
+
+  const buyerId = payment.buyer_id
+  const payAmount = Number(payment.amount)
+
+  // 2. Reverse the payment effect on transactions
+  // Get buyer's transactions that have paid_amount > 0, sorted by date descending
+  const { data: buyerTx, error: txError } = await supabase!.from('transactions')
+    .select('*').eq('buyer_id', buyerId).gt('paid_amount', 0).order('date', { ascending: false })
+  if (txError) throw new Error('Gagal mengambil transaksi: ' + txError.message)
+
+  let remaining = payAmount
+  for (const tx of (buyerTx || [])) {
+    if (remaining <= 0) break
+    const currentPaid = Number(tx.paid_amount)
+    const reduceBy = Math.min(remaining, currentPaid)
+    const newPaid = currentPaid - reduceBy
+    let newStatus = 'PAID'
+    if (newPaid <= 0) newStatus = 'UNPAID'
+    else if (newPaid < Number(tx.total_amount)) newStatus = 'PARTIAL'
+
+    await supabase!.from('transactions').update({ paid_amount: newPaid, status: newStatus }).eq('id', tx.id)
+    remaining -= reduceBy
+  }
+
+  // 3. Delete the payment
+  const { error } = await supabase!.from('payments').delete().eq('id', id)
+  if (error) throw new Error('Gagal menghapus pembayaran: ' + error.message)
+  return { success: true, message: 'Pembayaran berhasil dihapus' }
 }
 
 // ==================== DASHBOARD ====================

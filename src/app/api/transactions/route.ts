@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTransactions, createTransaction } from '@/lib/db-store'
+import { getTransactions, createTransaction } from '@/lib/db-prisma'
 
 export async function GET() {
   try {

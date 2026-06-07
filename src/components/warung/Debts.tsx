@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { useFetch, apiPost } from "@/hooks/use-api"
+import { useFetch, apiPost, apiDelete } from "@/hooks/use-api"
 
 interface Buyer { id: string; name: string; phone: string; totalDebt: number }
 interface Transaction {
@@ -26,7 +26,14 @@ function formatDate(d: string) {
 }
 function getTodayStr() { return new Date().toISOString().split("T")[0] }
 
-type LedgerEntry = { date: string; type: "DEBT" | "PAYMENT"; description: string; amount: number; runningDebt: number }
+type LedgerEntry = {
+  date: string
+  type: "DEBT" | "PAYMENT"
+  description: string
+  amount: number
+  runningDebt: number
+  id: string // transaction id or payment id
+}
 
 export function Debts() {
   const { toast } = useToast()
@@ -49,6 +56,11 @@ export function Debts() {
   const [debtDate, setDebtDate] = useState(getTodayStr())
   const [debtDesc, setDebtDesc] = useState("")
   const [debtAmount, setDebtAmount] = useState("")
+
+  // Delete dialogs
+  const [deleteTxDialogOpen, setDeleteTxDialogOpen] = useState(false)
+  const [deletePayDialogOpen, setDeletePayDialogOpen] = useState(false)
+  const [deleteEntry, setDeleteEntry] = useState<LedgerEntry | null>(null)
 
   const loading = buyersLoading || txLoading || payLoading
 
@@ -110,6 +122,31 @@ export function Debts() {
     }
   }
 
+  const handleDeleteEntry = async () => {
+    if (!deleteEntry) return
+    setSaving(true)
+    try {
+      if (deleteEntry.type === "DEBT") {
+        await apiDelete(`/api/transactions/${deleteEntry.id}`)
+        toast({ title: "Berhasil", description: "Hutang berhasil dihapus" })
+      } else {
+        await apiDelete(`/api/payments/${deleteEntry.id}`)
+        toast({ title: "Berhasil", description: "Pembayaran berhasil dihapus" })
+      }
+      await refreshAll()
+      if (deleteEntry.type === "DEBT") {
+        setDeleteTxDialogOpen(false)
+      } else {
+        setDeletePayDialogOpen(false)
+      }
+      setDeleteEntry(null)
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Gagal menghapus", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const debtors = buyersWithDebt.filter((b) => b.totalDebt > 0)
   const filteredDebtors = debtors.filter((d) =>
     d.name.toLowerCase().includes(search.toLowerCase()) || (d.phone || "").includes(search)
@@ -125,10 +162,10 @@ export function Debts() {
       const desc = tx.items.length > 0
         ? tx.items.map((i) => `${i.productName} x${i.quantity}`).join(", ")
         : tx.notes || "Hutang"
-      entries.push({ date: tx.date, type: "DEBT", description: desc, amount: tx.totalAmount, runningDebt: 0 })
+      entries.push({ date: tx.date, type: "DEBT", description: desc, amount: tx.totalAmount, runningDebt: 0, id: tx.id })
     }
     for (const p of buyerPay) {
-      entries.push({ date: p.date, type: "PAYMENT", description: p.notes || "Bayar hutang", amount: p.amount, runningDebt: 0 })
+      entries.push({ date: p.date, type: "PAYMENT", description: p.notes || "Bayar hutang", amount: p.amount, runningDebt: 0, id: p.id })
     }
 
     entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -221,7 +258,14 @@ export function Debts() {
                       <div className="border-t">
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
-                            <thead className="bg-muted/50"><tr><th className="text-left p-2.5 font-medium text-muted-foreground">Tanggal</th><th className="text-left p-2.5 font-medium text-muted-foreground">Keterangan</th><th className="text-right p-2.5 font-medium text-muted-foreground">Hutang (+)</th><th className="text-right p-2.5 font-medium text-muted-foreground">Bayar (-)</th><th className="text-right p-2.5 font-medium text-muted-foreground">Sisa</th></tr></thead>
+                            <thead className="bg-muted/50"><tr>
+                              <th className="text-left p-2.5 font-medium text-muted-foreground">Tanggal</th>
+                              <th className="text-left p-2.5 font-medium text-muted-foreground">Keterangan</th>
+                              <th className="text-right p-2.5 font-medium text-muted-foreground">Hutang (+)</th>
+                              <th className="text-right p-2.5 font-medium text-muted-foreground">Bayar (-)</th>
+                              <th className="text-right p-2.5 font-medium text-muted-foreground">Sisa</th>
+                              <th className="text-center p-2.5 font-medium text-muted-foreground">Aksi</th>
+                            </tr></thead>
                             <tbody>
                               {ledger.map((entry, idx) => (
                                 <tr key={idx} className={`border-t ${entry.type === "PAYMENT" ? "bg-emerald-50/50" : ""}`}>
@@ -230,9 +274,23 @@ export function Debts() {
                                   <td className="p-2.5 text-right">{entry.type === "DEBT" ? <span className="font-medium text-red-600">+{formatRupiah(entry.amount)}</span> : <span className="text-muted-foreground">-</span>}</td>
                                   <td className="p-2.5 text-right">{entry.type === "PAYMENT" ? <span className="font-medium text-emerald-600">-{formatRupiah(entry.amount)}</span> : <span className="text-muted-foreground">-</span>}</td>
                                   <td className="p-2.5 text-right font-semibold"><span className={entry.runningDebt > 0 ? "text-red-600" : "text-emerald-600"}>{formatRupiah(entry.runningDebt)}</span></td>
+                                  <td className="p-2.5 text-center">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setDeleteEntry(entry)
+                                        if (entry.type === "DEBT") setDeleteTxDialogOpen(true)
+                                        else setDeletePayDialogOpen(true)
+                                      }}
+                                      className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                                      title={entry.type === "DEBT" ? "Hapus hutang" : "Hapus pembayaran"}
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                    </button>
+                                  </td>
                                 </tr>
                               ))}
-                              {ledger.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">Belum ada riwayat</td></tr>}
+                              {ledger.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">Belum ada riwayat</td></tr>}
                             </tbody>
                           </table>
                         </div>
@@ -276,6 +334,50 @@ export function Debts() {
             <div className="space-y-2"><Label>Catatan</Label><Input value={payNotes} onChange={(e) => setPayNotes(e.target.value)} placeholder="Opsional..." /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setPayDialogOpen(false)}>Batal</Button><Button onClick={handlePay} disabled={saving} className="bg-[oklch(0.35_0.12_250)] hover:bg-[oklch(0.30_0.12_250)]">{saving ? "Menyimpan..." : "Simpan Pembayaran"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Transaction (Debt) Dialog */}
+      <Dialog open={deleteTxDialogOpen} onOpenChange={setDeleteTxDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-red-600">Hapus Hutang</DialogTitle></DialogHeader>
+          <div className="py-4">
+            <p className="mb-2">Yakin ingin menghapus hutang ini?</p>
+            {deleteEntry && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm space-y-1">
+                <p><span className="text-muted-foreground">Keterangan:</span> <strong>{deleteEntry.description}</strong></p>
+                <p><span className="text-muted-foreground">Jumlah:</span> <strong className="text-red-600">{formatRupiah(deleteEntry.amount)}</strong></p>
+                <p><span className="text-muted-foreground">Tanggal:</span> {formatDate(deleteEntry.date)}</p>
+                <p className="text-red-600 font-medium mt-2">Jika hutang ini dari transaksi barang, stok akan dikembalikan.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteTxDialogOpen(false); setDeleteEntry(null) }}>Batal</Button>
+            <Button onClick={handleDeleteEntry} disabled={saving} className="bg-red-600 hover:bg-red-700">{saving ? "Menghapus..." : "Ya, Hapus"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Payment Dialog */}
+      <Dialog open={deletePayDialogOpen} onOpenChange={setDeletePayDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-red-600">Hapus Pembayaran</DialogTitle></DialogHeader>
+          <div className="py-4">
+            <p className="mb-2">Yakin ingin menghapus pembayaran ini?</p>
+            {deleteEntry && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm space-y-1">
+                <p><span className="text-muted-foreground">Keterangan:</span> <strong>{deleteEntry.description}</strong></p>
+                <p><span className="text-muted-foreground">Jumlah:</span> <strong className="text-red-600">{formatRupiah(deleteEntry.amount)}</strong></p>
+                <p><span className="text-muted-foreground">Tanggal:</span> {formatDate(deleteEntry.date)}</p>
+                <p className="text-red-600 font-medium mt-2">Menghapus pembayaran akan mengembalikan sisa hutang pembeli.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeletePayDialogOpen(false); setDeleteEntry(null) }}>Batal</Button>
+            <Button onClick={handleDeleteEntry} disabled={saving} className="bg-red-600 hover:bg-red-700">{saving ? "Menghapus..." : "Ya, Hapus"}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

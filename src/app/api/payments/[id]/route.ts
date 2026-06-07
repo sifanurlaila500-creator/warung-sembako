@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { deleteTransaction } from '@/lib/db-prisma'
+import { deletePayment } from '@/lib/db-prisma'
 
 export async function DELETE(
   _req: NextRequest,
@@ -7,7 +7,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const result = await deleteTransaction(id)
+    const result = await deletePayment(id)
     return NextResponse.json(result)
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 })

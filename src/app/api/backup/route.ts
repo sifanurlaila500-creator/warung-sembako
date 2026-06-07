@@ -1,4 +1,4 @@
-import { exportAllData, importAllData } from '@/lib/db-store'
+import { exportAllData, importAllData } from '@/lib/db-prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
 // GET /api/backup - Export all data

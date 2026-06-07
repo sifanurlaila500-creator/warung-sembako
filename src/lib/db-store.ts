@@ -21,7 +21,7 @@ function checkSupabase() {
 export async function getBuyers() {
   checkSupabase()
   const { data, error } = await supabase!.from('buyers').select('*').order('created_at', { ascending: true })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal mengambil data pembeli: ' + error.message)
   return data.map((b: any) => ({
     id: b.id,
     name: b.name,
@@ -40,7 +40,7 @@ export async function createBuyer(input: { name: string; phone?: string; address
     phone: input.phone || '',
     address: input.address || '',
   }).select().single()
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal menambah pembeli: ' + error.message)
   return {
     id: data.id,
     name: data.name,
@@ -58,7 +58,7 @@ export async function updateBuyer(id: string, input: { name: string; phone?: str
     phone: input.phone || '',
     address: input.address || '',
   }).eq('id', id).select().single()
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal mengupdate pembeli: ' + error.message)
   return {
     id: data.id,
     name: data.name,
@@ -70,8 +70,21 @@ export async function updateBuyer(id: string, input: { name: string; phone?: str
 
 export async function deleteBuyer(id: string) {
   checkSupabase()
+  // 1. Delete payments yang refer ke buyer ini
+  await supabase!.from('payments').delete().eq('buyer_id', id)
+  // 2. Delete transaction_items yang refer ke transactions buyer ini
+  const { data: buyerTx } = await supabase!.from('transactions').select('id').eq('buyer_id', id)
+  if (buyerTx && buyerTx.length > 0) {
+    const txIds = buyerTx.map((t: any) => t.id)
+    for (const txId of txIds) {
+      await supabase!.from('transaction_items').delete().eq('transaction_id', txId)
+    }
+  }
+  // 3. Delete transactions buyer ini
+  await supabase!.from('transactions').delete().eq('buyer_id', id)
+  // 4. Delete buyer
   const { error } = await supabase!.from('buyers').delete().eq('id', id)
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal menghapus pembeli: ' + error.message)
   return { success: true }
 }
 
@@ -80,7 +93,7 @@ export async function deleteBuyer(id: string) {
 export async function getProducts() {
   checkSupabase()
   const { data, error } = await supabase!.from('products').select('*').order('created_at', { ascending: true })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal mengambil data produk: ' + error.message)
   return data.map((p: any) => ({
     id: p.id,
     name: p.name,
@@ -103,7 +116,7 @@ export async function createProduct(input: { name: string; unit: string; buyPric
     sell_price: input.sellPrice,
     stock: input.stock,
   }).select().single()
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal menambah produk: ' + error.message)
   return {
     id: data.id,
     name: data.name,
@@ -124,7 +137,8 @@ export async function updateProduct(id: string, input: { name: string; unit: str
     sell_price: input.sellPrice,
     stock: input.stock,
   }).eq('id', id).select().single()
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal mengupdate produk: ' + error.message)
+  if (!data) throw new Error('Produk tidak ditemukan')
   return {
     id: data.id,
     name: data.name,
@@ -138,8 +152,20 @@ export async function updateProduct(id: string, input: { name: string; unit: str
 
 export async function deleteProduct(id: string) {
   checkSupabase()
+  // 1. Set product_id ke NULL di semua transaction_items yang refer ke produk ini
+  //    (nama produk tetap tersimpan di product_name)
+  const { error: nullifyError } = await supabase!
+    .from('transaction_items')
+    .update({ product_id: null })
+    .eq('product_id', id)
+  if (nullifyError) {
+    console.warn('Warning: gagal nullify product_id di transaction_items:', nullifyError.message)
+    // Tetap lanjut, coba hapus langsung
+  }
+
+  // 2. Delete produk
   const { error } = await supabase!.from('products').delete().eq('id', id)
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal menghapus produk: ' + error.message)
   return { success: true }
 }
 
@@ -148,7 +174,7 @@ export async function deleteProduct(id: string) {
 export async function getTransactions() {
   checkSupabase()
   const { data, error } = await supabase!.from('transactions').select('*, transaction_items(*)').order('date', { ascending: false })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal mengambil data transaksi: ' + error.message)
   const buyers = await getBuyers()
   return data.map((t: any) => ({
     id: t.id,
@@ -178,6 +204,11 @@ export async function createTransaction(input: {
   totalAmount: number
 }) {
   checkSupabase()
+
+  // Validate buyer exists
+  const { data: buyerCheck } = await supabase!.from('buyers').select('id').eq('id', input.buyerId).single()
+  if (!buyerCheck) throw new Error('Pembeli tidak ditemukan')
+
   const paidAmount = input.type === 'CASH' ? input.totalAmount : input.paidAmount
   let status = 'PAID'
   if (input.type === 'CREDIT') {
@@ -194,7 +225,7 @@ export async function createTransaction(input: {
     paid_amount: paidAmount,
     type: input.type,
     status,
-    notes: input.notes,
+    notes: input.notes || '',
   }).select().single()
   if (txError) throw new Error('Gagal simpan transaksi: ' + txError.message)
 
@@ -216,7 +247,10 @@ export async function createTransaction(input: {
     for (const item of input.items) {
       if (!item.productId) continue
       const { data: prod } = await supabase!.from('products').select('stock').eq('id', item.productId).single()
-      if (prod) await supabase!.from('products').update({ stock: Math.max(0, prod.stock - item.quantity) }).eq('id', item.productId)
+      if (prod) {
+        const newStock = Math.max(0, prod.stock - item.quantity)
+        await supabase!.from('products').update({ stock: newStock }).eq('id', item.productId)
+      }
     }
   }
 
@@ -238,19 +272,26 @@ export async function createTransaction(input: {
 
 export async function deleteTransaction(id: string) {
   checkSupabase()
-  // Get items to restore stock
+  // 1. Get items untuk restore stock
   const { data: items } = await supabase!.from('transaction_items').select('*').eq('transaction_id', id)
   if (items && items.length > 0) {
     for (const item of items) {
       if (!item.product_id) continue
       const { data: prod } = await supabase!.from('products').select('stock').eq('id', item.product_id).single()
-      if (prod) await supabase!.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.product_id)
+      if (prod) {
+        const newStock = prod.stock + item.quantity
+        await supabase!.from('products').update({ stock: newStock }).eq('id', item.product_id)
+      }
     }
   }
-  // Delete transaction items first (cascade should handle this, but be explicit)
-  await supabase!.from('transaction_items').delete().eq('transaction_id', id)
+  // 2. Delete transaction items dulu
+  const { error: itemsDelError } = await supabase!.from('transaction_items').delete().eq('transaction_id', id)
+  if (itemsDelError) throw new Error('Gagal hapus item transaksi: ' + itemsDelError.message)
+  // 3. Delete payments yang refer ke transaksi ini
+  await supabase!.from('payments').delete().eq('transaction_id', id)
+  // 4. Delete transaction
   const { error } = await supabase!.from('transactions').delete().eq('id', id)
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal menghapus transaksi: ' + error.message)
   return { success: true, message: 'Transaksi berhasil dihapus' }
 }
 
@@ -259,7 +300,7 @@ export async function deleteTransaction(id: string) {
 export async function getPayments() {
   checkSupabase()
   const { data, error } = await supabase!.from('payments').select('*').order('date', { ascending: false })
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal mengambil data pembayaran: ' + error.message)
   const buyers = await getBuyers()
   return data.map((p: any) => ({
     id: p.id,
@@ -278,7 +319,7 @@ export async function createPayment(input: { buyerId: string; amount: number; da
   // Get unpaid transactions
   const { data: unpaidTx, error: txError } = await supabase!.from('transactions')
     .select('*').eq('buyer_id', input.buyerId).in('status', ['UNPAID', 'PARTIAL']).order('date', { ascending: true })
-  if (txError) throw new Error(txError.message)
+  if (txError) throw new Error('Gagal mengambil transaksi belum bayar: ' + txError.message)
 
   let remaining = input.amount
   let firstTxId: string | null = null
@@ -286,6 +327,7 @@ export async function createPayment(input: { buyerId: string; amount: number; da
   for (const tx of (unpaidTx || [])) {
     if (remaining <= 0) break
     const owing = Number(tx.total_amount) - Number(tx.paid_amount)
+    if (owing <= 0) continue
     const payForThis = Math.min(remaining, owing)
     const newPaid = Number(tx.paid_amount) + payForThis
     let newStatus = 'PAID'
@@ -304,9 +346,9 @@ export async function createPayment(input: { buyerId: string; amount: number; da
     transaction_id: firstTxId,
     amount: input.amount,
     date: input.date || new Date().toISOString(),
-    notes: input.notes,
+    notes: input.notes || '',
   }).select().single()
-  if (payError) throw new Error(payError.message)
+  if (payError) throw new Error('Gagal simpan pembayaran: ' + payError.message)
 
   const buyers = await getBuyers()
   return {
@@ -382,7 +424,6 @@ export async function getReportsData() {
 
   const monthlyReport = Object.entries(monthlyData).map(([month, data]) => ({ month, ...data })).sort((a, b) => a.month.localeCompare(b.month))
 
-  // Get buyer debt data for reports
   const buyers = await getBuyers()
   const debtByBuyer = buyers.map((b: any) => {
     const buyerTx = transactions.filter((t: any) => t.buyerId === b.id && t.type === 'CREDIT' && t.status !== 'PAID')
@@ -408,13 +449,11 @@ export async function getReportsData() {
 export async function seedDatabase() {
   checkSupabase()
 
-  // Check if buyers already exist
   const { data: existingBuyers } = await supabase!.from('buyers').select('id').limit(1)
   if (existingBuyers && existingBuyers.length > 0) {
     return { message: 'Database sudah memiliki data, seed dibatalkan.', seeded: false }
   }
 
-  // Seed initial buyers
   const buyers = INITIAL_BUYERS.map((name, i) => ({
     id: 'b' + String(i + 1).padStart(2, '0'),
     name,
@@ -423,7 +462,7 @@ export async function seedDatabase() {
   }))
 
   const { error } = await supabase!.from('buyers').insert(buyers)
-  if (error) throw new Error(error.message)
+  if (error) throw new Error('Gagal seed data pembeli: ' + error.message)
 
   return { message: `Berhasil menambahkan ${buyers.length} pembeli awal.`, seeded: true }
 }
@@ -457,7 +496,6 @@ export async function importAllData(data: {
 }) {
   checkSupabase()
 
-  // Import buyers
   if (data.buyers && data.buyers.length > 0) {
     const buyers = data.buyers.map((b: any) => ({
       id: b.id,
@@ -469,7 +507,6 @@ export async function importAllData(data: {
     if (error) throw new Error('Gagal import buyers: ' + error.message)
   }
 
-  // Import products
   if (data.products && data.products.length > 0) {
     const products = data.products.map((p: any) => ({
       id: p.id,
@@ -483,10 +520,9 @@ export async function importAllData(data: {
     if (error) throw new Error('Gagal import products: ' + error.message)
   }
 
-  // Import transactions
   if (data.transactions && data.transactions.length > 0) {
     for (const t of data.transactions) {
-      const { data: tx, error: txError } = await supabase!.from('transactions').upsert({
+      const { error: txError } = await supabase!.from('transactions').upsert({
         id: t.id,
         buyer_id: t.buyerId,
         date: t.date,
@@ -495,15 +531,14 @@ export async function importAllData(data: {
         type: t.type,
         status: t.status,
         notes: t.notes || '',
-      }, { onConflict: 'id' }).select().single()
+      }, { onConflict: 'id' })
       if (txError) throw new Error('Gagal import transaction: ' + txError.message)
 
-      // Import transaction items
       if (t.items && t.items.length > 0) {
         const items = t.items.map((i: any, idx: number) => ({
           id: `${t.id}_item_${idx}`,
           transaction_id: t.id,
-          product_id: i.productId || '',
+          product_id: i.productId || null,
           product_name: i.productName || '',
           quantity: i.quantity,
           buy_price: i.buyPrice || 0,
@@ -516,12 +551,11 @@ export async function importAllData(data: {
     }
   }
 
-  // Import payments
   if (data.payments && data.payments.length > 0) {
     const payments = data.payments.map((p: any) => ({
       id: p.id,
       buyer_id: p.buyerId,
-      transaction_id: p.transactionId,
+      transaction_id: p.transactionId || null,
       amount: p.amount,
       date: p.date,
       notes: p.notes || '',

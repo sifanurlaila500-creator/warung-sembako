@@ -41,10 +41,12 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 -- Transaction Items
+-- product_id pakai ON DELETE SET NULL supaya produk bisa dihapus tanpa error
+-- nama produk tetap tersimpan di product_name
 CREATE TABLE IF NOT EXISTS transaction_items (
   id TEXT PRIMARY KEY,
   transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-  product_id TEXT REFERENCES products(id),
+  product_id TEXT REFERENCES products(id) ON DELETE SET NULL,
   product_name TEXT DEFAULT '',
   quantity INTEGER DEFAULT 1,
   buy_price NUMERIC DEFAULT 0,
@@ -56,7 +58,7 @@ CREATE TABLE IF NOT EXISTS transaction_items (
 CREATE TABLE IF NOT EXISTS payments (
   id TEXT PRIMARY KEY,
   buyer_id TEXT NOT NULL REFERENCES buyers(id) ON DELETE CASCADE,
-  transaction_id TEXT REFERENCES transactions(id),
+  transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
   amount NUMERIC NOT NULL,
   date TIMESTAMPTZ DEFAULT now(),
   notes TEXT DEFAULT '',

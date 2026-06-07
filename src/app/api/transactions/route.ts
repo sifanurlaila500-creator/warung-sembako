@@ -1,53 +1,10 @@
-import { getData, setData, generateId } from '@/lib/db-store'
 import { NextRequest, NextResponse } from 'next/server'
-
-interface Product {
-  id: string
-  name: string
-  unit: string
-  buyPrice: number
-  sellPrice: number
-  stock: number
-}
-
-interface TransactionItem {
-  productId: string
-  productName: string
-  quantity: number
-  buyPrice: number
-  sellPrice: number
-  subtotal: number
-}
-
-interface Transaction {
-  id: string
-  buyerId: string
-  date: string
-  totalAmount: number
-  paidAmount: number
-  type: string
-  status: string
-  notes: string
-  items: TransactionItem[]
-  createdAt: string
-}
-
-interface Buyer {
-  id: string
-  name: string
-}
+import { getTransactions, createTransaction } from '@/lib/db-store'
 
 export async function GET() {
   try {
-    const transactions: Transaction[] = await getData('transactions.json')
-    const buyers: Buyer[] = await getData('buyers.json')
-
-    const enriched = transactions.map((tx) => ({
-      ...tx,
-      buyer: buyers.find((b) => b.id === tx.buyerId) || { name: 'Unknown' },
-    }))
-
-    return NextResponse.json(enriched)
+    const transactions = await getTransactions()
+    return NextResponse.json(transactions)
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
@@ -58,22 +15,21 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { buyerId, type, items, notes, date, totalOverride } = body
 
-    const transactions: Transaction[] = await getData('transactions.json')
-    const products: Product[] = await getData('products.json')
-    const buyers: Buyer[] = await getData('buyers.json')
-
     let totalAmount = 0
-    const itemData: TransactionItem[] = []
+    const itemData: { productId: string; productName: string; quantity: number; buyPrice: number; sellPrice: number; subtotal: number }[] = []
 
     // If totalOverride is provided (quick debt entry), use it directly
     if (totalOverride && Number(totalOverride) > 0 && (!items || items.length === 0)) {
       totalAmount = Number(totalOverride)
     } else {
       // Normal transaction with items
+      const { getProducts } = await import('@/lib/db-store')
+      const products = await getProducts()
+
       for (const item of (items || [])) {
-        const product = products.find((p) => p.id === item.productId)
+        const product = products.find((p: any) => p.id === item.productId)
         if (!product) {
-          return NextResponse.json({ error: `Produk tidak ditemukan` }, { status: 400 })
+          return NextResponse.json({ error: 'Produk tidak ditemukan' }, { status: 400 })
         }
 
         const subtotal = product.sellPrice * item.quantity
@@ -87,45 +43,22 @@ export async function POST(req: NextRequest) {
           sellPrice: product.sellPrice,
           subtotal,
         })
-
-        // Update stock
-        const pIdx = products.findIndex((p) => p.id === item.productId)
-        if (pIdx !== -1) {
-          products[pIdx].stock = Math.max(0, products[pIdx].stock - item.quantity)
-        }
-      }
-      if (itemData.length > 0) {
-        await setData('products.json', products)
       }
     }
 
     const paidAmount = type === 'CASH' ? totalAmount : (Number(body.paidAmount) || 0)
-    let status = 'PAID'
-    if (type === 'CREDIT') {
-      if (paidAmount <= 0) status = 'UNPAID'
-      else if (paidAmount < totalAmount) status = 'PARTIAL'
-      else status = 'PAID'
-    }
 
-    const newTx: Transaction = {
-      id: generateId(),
+    const transaction = await createTransaction({
       buyerId,
-      date: date ? new Date(date).toISOString() : new Date().toISOString(),
-      totalAmount,
-      paidAmount,
       type,
-      status,
+      paidAmount,
       notes: notes || '',
+      date: date ? new Date(date).toISOString() : new Date().toISOString(),
       items: itemData,
-      createdAt: new Date().toISOString(),
-    }
+      totalAmount,
+    })
 
-    transactions.push(newTx)
-    await setData('transactions.json', transactions)
-
-    const buyer = buyers.find((b) => b.id === buyerId) || { name: 'Unknown' }
-
-    return NextResponse.json({ ...newTx, buyer }, { status: 201 })
+    return NextResponse.json(transaction, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }

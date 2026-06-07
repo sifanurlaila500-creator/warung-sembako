@@ -1,42 +1,14 @@
-import { getData, setData, generateId } from '@/lib/db-store'
 import { NextRequest, NextResponse } from 'next/server'
-
-interface Buyer {
-  id: string
-  name: string
-  phone: string
-  address: string
-  createdAt: string
-}
-
-interface Transaction {
-  id: string
-  buyerId: string
-  date: string
-  totalAmount: number
-  paidAmount: number
-  type: string
-  status: string
-  notes: string
-  items: { productId: string; productName: string; quantity: number; sellPrice: number; subtotal: number }[]
-}
-
-interface Payment {
-  id: string
-  buyerId: string
-  amount: number
-  date: string
-  notes: string
-}
+import { getBuyers, getTransactions, createBuyer } from '@/lib/db-store'
 
 export async function GET() {
   try {
-    const buyers: Buyer[] = await getData('buyers.json')
-    const transactions: Transaction[] = await getData('transactions.json')
+    const buyers = await getBuyers()
+    const transactions = await getTransactions()
 
-    const buyersWithDebt = buyers.map((b) => {
-      const buyerTx = transactions.filter((t) => t.buyerId === b.id && t.type === 'CREDIT')
-      const totalDebt = buyerTx.reduce((sum, t) => sum + (t.totalAmount - t.paidAmount), 0)
+    const buyersWithDebt = buyers.map((b: any) => {
+      const buyerTx = transactions.filter((t: any) => t.buyerId === b.id && t.type === 'CREDIT')
+      const totalDebt = buyerTx.reduce((sum: number, t: any) => sum + (t.totalAmount - t.paidAmount), 0)
       return { ...b, totalDebt }
     })
 
@@ -49,20 +21,11 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const buyers: Buyer[] = await getData('buyers.json')
-
-    const newBuyer: Buyer = {
-      id: generateId(),
-      name: body.name,
-      phone: body.phone || '',
-      address: body.address || '',
-      createdAt: new Date().toISOString(),
+    if (!body.name) {
+      return NextResponse.json({ error: 'Nama harus diisi' }, { status: 400 })
     }
-
-    buyers.push(newBuyer)
-    await setData('buyers.json', buyers)
-
-    return NextResponse.json({ ...newBuyer, totalDebt: 0 }, { status: 201 })
+    const buyer = await createBuyer({ name: body.name, phone: body.phone, address: body.address })
+    return NextResponse.json(buyer, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }

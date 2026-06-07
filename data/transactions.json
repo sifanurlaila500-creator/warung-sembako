@@ -4,7 +4,7 @@
     "buyerId": "b02",
     "date": "2025-03-10T00:00:00.000Z",
     "totalAmount": 130000,
-    "paidAmount": 50000,
+    "paidAmount": 80000,
     "type": "CREDIT",
     "status": "PARTIAL",
     "notes": "Hutang Adani",
@@ -19,5 +19,26 @@
       }
     ],
     "createdAt": "2026-06-04T22:19:13.508Z"
+  },
+  {
+    "id": "mq3xf4m033skwugx5",
+    "buyerId": "b02",
+    "date": "2025-03-10T00:00:00.000Z",
+    "totalAmount": 65000,
+    "paidAmount": 0,
+    "type": "CREDIT",
+    "status": "UNPAID",
+    "notes": "Hutang Adani",
+    "items": [
+      {
+        "productId": "mq00cq9bpmllo51m2",
+        "productName": "Beras 5kg",
+        "quantity": 1,
+        "buyPrice": 50000,
+        "sellPrice": 65000,
+        "subtotal": 65000
+      }
+    ],
+    "createdAt": "2026-06-07T15:18:02.520Z"
   }
 ]

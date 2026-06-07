@@ -196,23 +196,25 @@ export async function createTransaction(input: {
     status,
     notes: input.notes,
   }).select().single()
-  if (txError) throw new Error(txError.message)
+  if (txError) throw new Error('Gagal simpan transaksi: ' + txError.message)
 
   if (input.items && input.items.length > 0) {
-    const items = input.items.map((item) => ({
+    const items = input.items.map((item, idx) => ({
+      id: `${id}_item_${idx}`,
       transaction_id: id,
-      product_id: item.productId,
-      product_name: item.productName,
+      product_id: item.productId || null,
+      product_name: item.productName || '',
       quantity: item.quantity,
       buy_price: item.buyPrice,
       sell_price: item.sellPrice,
       subtotal: item.subtotal,
     }))
     const { error: itemsError } = await supabase!.from('transaction_items').insert(items)
-    if (itemsError) throw new Error(itemsError.message)
+    if (itemsError) throw new Error('Gagal simpan item transaksi: ' + itemsError.message)
 
     // Update stock
     for (const item of input.items) {
+      if (!item.productId) continue
       const { data: prod } = await supabase!.from('products').select('stock').eq('id', item.productId).single()
       if (prod) await supabase!.from('products').update({ stock: Math.max(0, prod.stock - item.quantity) }).eq('id', item.productId)
     }
@@ -240,6 +242,7 @@ export async function deleteTransaction(id: string) {
   const { data: items } = await supabase!.from('transaction_items').select('*').eq('transaction_id', id)
   if (items && items.length > 0) {
     for (const item of items) {
+      if (!item.product_id) continue
       const { data: prod } = await supabase!.from('products').select('stock').eq('id', item.product_id).single()
       if (prod) await supabase!.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.product_id)
     }

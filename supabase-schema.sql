@@ -1,5 +1,5 @@
 -- ============================================
--- WARUNG SIFA SARAH - Supabase Schema
+-- WARUNG SIFA - Supabase Schema
 -- ============================================
 -- Jalankan SQL ini di Supabase Dashboard → SQL Editor
 -- Setelah itu, tambahkan env vars di Vercel/lokal:

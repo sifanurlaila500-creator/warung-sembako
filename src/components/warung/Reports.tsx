@@ -18,8 +18,8 @@ interface ReportsData {
   activeDebtors: number
   totalBuyers: number
   totalProducts: number
-  totalCashSales: number
-  totalCreditSales: number
+  cashSales: number
+  creditSales: number
   debtByBuyer: { id: string; name: string; phone: string; totalDebt: number }[]
 }
 
@@ -118,8 +118,8 @@ export function Reports() {
             <p className="text-3xl font-bold text-emerald-600">{formatRupiah(data.totalProfit)}</p>
             <p className="text-sm text-muted-foreground mt-1">Selisih harga jual - harga beli</p>
             <div className="mt-3 pt-3 border-t space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Penjualan Tunai</span><span>{formatRupiah(data.totalCashSales)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Penjualan Utang</span><span>{formatRupiah(data.totalCreditSales)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Penjualan Tunai</span><span>{formatRupiah(data.cashSales)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Penjualan Utang</span><span>{formatRupiah(data.creditSales)}</span></div>
             </div>
           </CardContent>
         </Card>

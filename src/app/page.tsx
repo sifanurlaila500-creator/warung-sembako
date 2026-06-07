@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Sidebar, MobileNav, TabType } from "@/components/warung/Sidebar"
 import { Dashboard } from "@/components/warung/Dashboard"
 import { Buyers } from "@/components/warung/Buyers"
@@ -9,6 +9,7 @@ import { Transactions } from "@/components/warung/Transactions"
 import { Debts } from "@/components/warung/Debts"
 import { Reports } from "@/components/warung/Reports"
 import { Login } from "@/components/warung/Login"
+import { SupabaseSetup } from "@/components/warung/SupabaseSetup"
 
 const tabs = [
   {
@@ -55,6 +56,7 @@ const tabTitles: Record<TabType, string> = {
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard")
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null) // null = checking
+  const [supabaseReady, setSupabaseReady] = useState<boolean | null>(null) // null = checking
   const hasChecked = useRef(false)
 
   useEffect(() => {
@@ -62,6 +64,20 @@ export default function Home() {
     hasChecked.current = true
 
     let cancelled = false
+
+    // First check Supabase setup
+    fetch("/api/setup-status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) {
+          setSupabaseReady(data.configured === true)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSupabaseReady(false)
+      })
+
+    // Then check auth
     fetch("/api/auth/verify")
       .then((res) => res.json())
       .then((data) => {
@@ -76,21 +92,25 @@ export default function Home() {
     return () => { cancelled = true }
   }, [])
 
-  const handleLogin = () => {
+  const handleLogin = useCallback(() => {
     setIsAuthenticated(true)
-  }
+  }, [])
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" })
     } catch {
       // ignore
     }
     setIsAuthenticated(false)
-  }
+  }, [])
 
-  // Loading state while checking auth
-  if (isAuthenticated === null) {
+  const handleSupabaseConfigured = useCallback(() => {
+    setSupabaseReady(true)
+  }, [])
+
+  // Loading state while checking
+  if (supabaseReady === null || isAuthenticated === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[oklch(0.20_0.08_250)] via-[oklch(0.25_0.10_250)] to-[oklch(0.15_0.06_250)]">
         <div className="flex flex-col items-center gap-4">
@@ -107,6 +127,11 @@ export default function Home() {
         </div>
       </div>
     )
+  }
+
+  // Supabase not configured
+  if (!supabaseReady) {
+    return <SupabaseSetup onConfigured={handleSupabaseConfigured} />
   }
 
   // Not authenticated - show login
@@ -129,7 +154,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-[oklch(0.35_0.12_250)]">{tabTitles[activeTab]}</h2>
-              <p className="text-sm text-muted-foreground hidden sm:block">WARUNG SIFA - Sistem Pencatatan Tagihan</p>
+              <p className="text-sm text-muted-foreground hidden sm:block">WARUNG SIFA SARAH - Sistem Pencatatan Tagihan</p>
             </div>
             <div className="flex items-center gap-3">
               {/* Logout button on mobile */}

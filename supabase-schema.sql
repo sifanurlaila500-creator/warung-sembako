@@ -1,9 +1,15 @@
--- Warung SIFA - Supabase Schema
+-- ============================================
+-- WARUNG SIFA SARAH - Supabase Schema
+-- ============================================
 -- Jalankan SQL ini di Supabase Dashboard → SQL Editor
+-- Setelah itu, tambahkan env vars di Vercel/lokal:
+--   NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+--   SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
+-- ============================================
 
 -- Buyers
 CREATE TABLE IF NOT EXISTS buyers (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   phone TEXT DEFAULT '',
   address TEXT DEFAULT '',
@@ -12,7 +18,7 @@ CREATE TABLE IF NOT EXISTS buyers (
 
 -- Products
 CREATE TABLE IF NOT EXISTS products (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   unit TEXT DEFAULT 'pcs',
   buy_price NUMERIC DEFAULT 0,
@@ -23,7 +29,7 @@ CREATE TABLE IF NOT EXISTS products (
 
 -- Transactions
 CREATE TABLE IF NOT EXISTS transactions (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  id TEXT PRIMARY KEY,
   buyer_id TEXT NOT NULL REFERENCES buyers(id) ON DELETE CASCADE,
   date TIMESTAMPTZ DEFAULT now(),
   total_amount NUMERIC DEFAULT 0,
@@ -36,7 +42,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 
 -- Transaction Items
 CREATE TABLE IF NOT EXISTS transaction_items (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  id TEXT PRIMARY KEY,
   transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
   product_id TEXT REFERENCES products(id),
   product_name TEXT DEFAULT '',
@@ -48,7 +54,7 @@ CREATE TABLE IF NOT EXISTS transaction_items (
 
 -- Payments
 CREATE TABLE IF NOT EXISTS payments (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  id TEXT PRIMARY KEY,
   buyer_id TEXT NOT NULL REFERENCES buyers(id) ON DELETE CASCADE,
   transaction_id TEXT REFERENCES transactions(id),
   amount NUMERIC NOT NULL,
@@ -57,21 +63,21 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Enable RLS tapi allow semua (pakai anon key)
+-- Enable RLS tapi allow semua (pakai service role key)
 ALTER TABLE buyers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transaction_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 
--- Allow all operations for anon
+-- Allow all operations for anon and service_role
 CREATE POLICY "Allow all on buyers" ON buyers FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on products" ON products FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on transaction_items" ON transaction_items FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on payments" ON payments FOR ALL USING (true) WITH CHECK (true);
 
--- Seed initial buyers
+-- Seed initial buyers (21 nama pembeli)
 INSERT INTO buyers (id, name, phone, address, created_at) VALUES
   ('b01', 'Aikbal', '', '', now()),
   ('b02', 'Adani', '', '', now()),

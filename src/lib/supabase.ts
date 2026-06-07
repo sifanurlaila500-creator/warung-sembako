@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Check if Supabase is properly configured (not placeholder values)
+// Check if Supabase is properly configured
 const isConfigured = !!(
   supabaseUrl &&
   supabaseKey &&
@@ -12,5 +12,15 @@ const isConfigured = !!(
   supabaseUrl.startsWith('http')
 )
 
-export const supabase = isConfigured ? createClient(supabaseUrl!, supabaseKey!) : null
+if (!isConfigured) {
+  console.warn('⚠️ Supabase not configured. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env')
+}
+
+export const supabase = isConfigured ? createClient(supabaseUrl!, supabaseKey!, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+}) : null
+
 export const isSupabaseReady = isConfigured

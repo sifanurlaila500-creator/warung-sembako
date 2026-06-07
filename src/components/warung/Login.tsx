@@ -56,7 +56,7 @@ export function Login({ onLogin }: LoginProps) {
             <span className="text-3xl">🏪</span>
           </div>
           <CardTitle className="text-2xl font-bold text-[oklch(0.35_0.12_250)]">
-            WARUNG SIFA SARAH
+            WARUNG SIFA
           </CardTitle>
           <CardDescription className="text-sm mt-1">
             Sistem Pencatatan Tagihan

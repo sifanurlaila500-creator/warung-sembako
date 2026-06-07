@@ -22,7 +22,7 @@ export function Sidebar({ activeTab, onTabChange, tabs, onLogout }: SidebarProps
   return (
     <aside className="w-64 h-screen bg-[oklch(0.20_0.08_250)] text-white flex flex-col shrink-0 sticky top-0">
       <div className="p-6 border-b border-white/10">
-        <h1 className="text-xl font-bold tracking-tight">🏪 SIFA SARAH</h1>
+        <h1 className="text-xl font-bold tracking-tight">🏪 WARUNG SIFA</h1>
         <p className="text-xs text-white/60 mt-1">Sistem Pencatatan Tagihan</p>
       </div>
       <nav className="flex-1 p-3 space-y-1">
@@ -53,7 +53,7 @@ export function Sidebar({ activeTab, onTabChange, tabs, onLogout }: SidebarProps
             Keluar
           </button>
         )}
-        <p className="text-xs text-white/40 text-center">© 2025 WARUNG SIFA SARAH</p>
+        <p className="text-xs text-white/40 text-center">© 2025 WARUNG SIFA</p>
       </div>
     </aside>
   )

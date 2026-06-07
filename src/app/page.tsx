@@ -154,7 +154,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-[oklch(0.35_0.12_250)]">{tabTitles[activeTab]}</h2>
-              <p className="text-sm text-muted-foreground hidden sm:block">WARUNG SIFA SARAH - Sistem Pencatatan Tagihan</p>
+              <p className="text-sm text-muted-foreground hidden sm:block">WARUNG SIFA - Sistem Pencatatan Tagihan</p>
             </div>
             <div className="flex items-center gap-3">
               {/* Logout button on mobile */}
